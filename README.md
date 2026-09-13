@@ -99,6 +99,9 @@ bash run_web.sh              # Streamlit (macOS/Linux), Windows 는 run_web.bat
 
 ## ✨ 주요 기능
 
+- ⌨️ **UI 없는 실행 (CLI)** — `gurunote note <URL|파일>` 로 창을 띄우지 않고 파이프라인 실행.
+  `--json` 은 결과를 기계가 읽는 형태로 내보내므로 스크립트나 에이전트가 그대로 쓸 수 있음.
+  파이썬에서는 `from gurunote.pipeline import run_pipeline` 으로 호출.
 - 🎧 **오디오 자동 추출** — `yt-dlp` 로 유튜브 영상의 오디오만 mp3 로 로컬 임시 폴더에 다운로드
 - 📅 **유튜브 메타데이터 활용** — 영상 게시일, 채널, 설명, **공식 챕터**,
   **기존 자막**(수동/자동) 을 함께 수집해 LLM 번역·요약 단계에 컨텍스트로 주입.
@@ -343,6 +346,40 @@ python3 app_webview.py
 - 화면 구성: Main (생성 + 결과 4탭) / History (4-facet 트리 + 그리드) / Editor (마크다운 분할 프리뷰) / Dashboard (통계 + 의미 검색) / Settings (API 키 + STT/LLM 엔진 + Provider 조건부 필드).
 - ⌘K (또는 Ctrl+K) 로 SearchPalette 호출.
 
+### 명령줄 (CLI) — UI 없이 실행
+
+창을 띄우지 않고 같은 파이프라인을 돌립니다. `pip install -e .` (또는 `setup.sh`) 이후 사용합니다.
+
+```bash
+gurunote note "https://www.youtube.com/watch?v=..." --out note.md
+gurunote note ./talk.mp3 --engine mlx
+gurunote note "https://youtu.be/..." --json          # 기계가 읽는 결과
+gurunote engines                                      # 선택 가능한 STT 엔진
+gurunote providers                                    # 선택 가능한 LLM provider
+python -m gurunote --version                          # 설치 스크립트 없이도 동작
+```
+
+노트 본문(또는 `--json`)은 stdout 으로, 진행 로그는 stderr 로 나갑니다. 그래서
+`gurunote note ... > note.md` 로 받아도 로그가 섞이지 않습니다. 로그를 아예 끄려면
+`--quiet` 을 씁니다.
+
+종료 코드: 성공 `0`, 파이프라인 실패 `1`, 입력·옵션 오류 `2`, `--timeout` 초과 `124`.
+
+파이썬에서 직접 부를 때는 동기 API 를 씁니다.
+
+```python
+from gurunote.pipeline import run_pipeline
+
+result = run_pipeline("https://youtu.be/...", engine="auto")
+if result.ok:
+    print(result.full_md)
+else:
+    print(result.error, result.job_id)   # 로그는 ~/.gurunote/jobs/<job_id>/
+```
+
+`--provider` 를 주지 않으면 `LLM_PROVIDER` 환경변수를 따릅니다. 선택지 정본은
+`gurunote/options.py` 이며 GUI·CLI·React 가 같은 목록을 참조합니다.
+
 ### 옛 진입점 — v0.8 호환 (유지)
 
 새 UI 가 동작하지 않거나 옛 인터페이스가 필요한 경우 아래 진입점이 그대로 동작합니다. 파이프라인 코어 (`gurunote/`) 는 셋 다 공유합니다.
@@ -447,6 +484,10 @@ GuruNote/
 ├── docs/                       # 설계 참조, 연구 노트, 작업 일지 (legacy/journal/research/wip)
 ├── gurunote/
 │   ├── __init__.py
+│   ├── __main__.py             # `python -m gurunote` 진입점
+│   ├── cli.py                  # 명령줄 인터페이스 (note / engines / providers)
+│   ├── pipeline.py             # 파이프라인 동기 실행 API (run_pipeline)
+│   ├── options.py              # STT 엔진 / LLM provider 목록의 단일 출처
 │   ├── types.py                # Segment / Transcript 공통 데이터클래스
 │   ├── audio.py                # Step 1 — yt-dlp + 로컬 파일 오디오 추출
 │   ├── stt.py                  # Step 2 — WhisperX (NVIDIA) + AssemblyAI 폴백 라우터
@@ -483,6 +524,7 @@ GuruNote/
 │   ├── update_gurunote.py      # CLI 업데이트 진입점
 │   └── release_rehearsal_check.py  # 태그 푸시 전 릴리스 준비 체크
 └── .github/workflows/
+    ├── tests.yml               # push / PR 마다 단위 테스트 (Python 3.10 / 3.11 / 3.12)
     └── release-desktop.yml     # 태그 푸시 시 데스크톱 패키지 자동 빌드
 ```
 
@@ -506,7 +548,7 @@ GuruNote/
 주요 변경 사항은 [CHANGELOG.md](./CHANGELOG.md) 에 [Keep a Changelog](https://keepachangelog.com/)
 형식으로 기록되며 버전은 [Semantic Versioning](https://semver.org/) 을 따릅니다.
 
-현재 버전: **v1.0.0.28** — `redesign/tailwind-v2` 에 쌓여 있던 5/24~5/30 작업(v1.0.0.1~27)을 main 에 통합하고, 그 사이 main 에 들어간 단위 테스트 CI·`pip install -e .` 패키지 탐색 수정·`PipelineWorker` 모듈 분리(backlog B09)를 함께 담았습니다. v1.0.0.27 은 영어 원문 스크립트 화자 표기를 라벨에서 실제 이름으로: 한국어 번역본은 화자 실명이 나오는데 영어 원문만 `Speaker A/B` 라벨이라 비대칭이던 것을, 같은 화자 매핑(speaker_cache)을 영어 원문 섹션에도 적용. 화자분리가 못 잡았거나 매핑 없는 라벨은 기존 `Speaker X` 표기 그대로 유지(깨지지 않음). v1.0.0.26 은 토스트 알림 타입별 좌측 보더 색 구분: 성공(초록)·정보(파랑)·경고(주황)·실패(빨강)를 좌측 보더 색으로 구분(배경은 불투명 흰색 그대로 유지해 가독성 보존). 기존엔 타입별 시각 차이가 없어 성공·건너뜀·실패를 텍스트로만 구분해야 했음. v1.0.0.25 는 자동 Obsidian 내보내기 중복 건너뛰기: 자동 내보내기 토글이 켜진 상태에서 같은 영상을 다시 처리하면 vault 에 같은 노트 사본이 쌓이던 문제 수정. 같은 `gurunote_job_id` 표식 노트가 vault 에 이미 있으면 자동 내보내기는 건너뛴다(토스트로 안내). 수동 "Obsidian" 버튼은 종전대로 항상 새로 저장. v1.0.0.24 는 통용 표기 "추가" 행을 목록 맨 위로: "추가"를 누르면 새 빈 행이 목록 끝에 붙어 스크롤해야 보이던 것을 맨 앞에 넣어 추가 직후 바로 입력하게 함(검색어도 함께 해제). v1.0.0.23 은 통용 표기 독립 화면 이동 + 검색: 통용 표기 편집을 설정 "고급" 인라인에서 떼어 좌측 설정 네비의 독립 항목으로 이동(auto 자동 채움으로 항목이 늘어 고급 화면을 뒤덮던 문제 해소). 우측 전체 화면 + 영문·표기 검색(검색 중에도 수정·삭제가 맞는 행에 정확히 적용). v1.0.0.22 는 뷰어 "생성일" KST 표시: 노트 상세 패널·삭제 확인 대화상자의 생성일이 저장 원본인 ISO UTC 문자열(`2026-05-28T15:11:40...+00:00`)로 그대로 노출되던 문제 수정. 표시 단계에서 한국 시간(`Asia/Seoul`)으로 변환해 `2026-05-29 00:11` (`YYYY-MM-DD HH:mm`, 업로드일과 같은 결)로 표시 — 저장 필드는 불변(정렬 무영향). v1.0.0.21 은 뷰어 타임스탬프 표시 토글 + 본문 드래그 선택·복사 수정: 노트 뷰어의 한국어·영어 원문 탭에 "타임스탬프" 인라인 토글 추가(끄면 화면에서만 `[MM:SS]` 가 사라지고 화자명은 유지, 원본 불변), 그리고 한국어·영어 원문·요약 본문을 마우스로 드래그 선택해 복사할 수 없던 문제 수정(`user-select: text` 명시 추가). v1.0.0.20 은 요약 섹션 충실도 강화: 요약이 본문과 별도 LLM 경로라 충실도 룰이 미적용이던 문제. 요약 프롬프트에 환각 금지(입력에 없는 인물 날조)·영어 leak 금지(formidable→강력한)·인명 일관(스탠을 스턴으로 재음차 금지) 조항 추가 + 요약 결과에 dict 인명 교정 후처리(영문 병기의 영문 원어로 통용 표기 강제). v1.0.0.19 는 본문 연속 반복 라인 축약: 더듬거림 구간을 2-pass 정렬이 같은 문장으로 채우던 회귀 차단 — 같은 화자가 같은 긴 문장(10자+)을 3회+ 연속 반복하면 첫 줄만 남김 (짧은 발화·다른 화자 동일 발화·marker 보존). v1.0.0.18 은 본문 번역 충실 의역 전환. v1.0.0.17 은 노트에 생성 GuruNote 버전 표시 (추적성). v1.0.0.16 은 제목 구조 직역 강화 (게임/문답 형식 보존). v1.0.0.15 는 제목 원본 직역 우선 + 인명 통용 표기 dict 교정. v1.0.0.14 는 제목·요약 한자 혼입 차단 (Phase 3 보완). v1.0.0.13 은 노트 통용 표기 새로고침 (옛 인명 표기 텍스트 치환). v1.0.0.12 는 통용 표기 편집 UI (설정 → 고급, auto 확인 + user 수정). v1.0.0.11 은 통용 표기 dict auto/user 구조 + 자동 채움 (작업 중 본 고유명사 자동 기록, user 우선). v1.0.0.10 은 인명 통용 표기 결정론적 교정 (entity/speaker 캐시 강제 교정, 예: 팰머 러커이→팔머 럭키). v1.0.0.9 는 Obsidian 작업 완료 후 자동 내보내기 토글 (설정 → Obsidian, 기본 꺼짐): 켜면 노트 생성이 끝날 때마다 자동으로 vault 에 내보냄 (RAG 유사 노트 wikilink 포함). v1.0.0.8 은 설정 "고급"에 처리 옵션 토글(2-pass 번역 `GURUNOTE_TWO_PASS` + STT 의미 단위 재분할 `GURUNOTE_SEGMENT_RESPLIT`, 둘 다 기본 켜짐). v1.0.0.7 은 영문 병기 철자 소스 검증: `한국어(English)` 병기의 영문 원어를 소스(transcript+제목)에 실재하는 철자로 결정론적 교정/생략 (예: 안두릴(Danduril)→안두릴(Anduril), 제목 포함). 근거 없는 영문은 병기 생략. v1.0.0.6 은 인명 음차 통용 표기 우선 (Palmer Luckey→팔머 럭키, Rick Rieder→릭 리더). v1.0.0.5 는 Obsidian 내보내기 파일명에서 `GuruNote_` 접두사 제거 (파일명 = 작업물 제목). 출처 구분은 frontmatter `gurunote_job_id` 표식 + `Gurunote/` 하위 폴더가 담당. wikilink stem 도 같이 정합돼 그래프 연결 유지. v1.0.0.4 는 라이브러리 삭제 시 Obsidian vault 사본 자동 삭제 (`gurunote_job_id` 표식 매칭, 표식 없는 기존 파일은 보존). v1.0.0.3 은 Obsidian 내보내기 + RAG 유사 노트 `[[wikilink]]` 그래프 연결. v1.0.0.2 는 의미 검색(RAG) React UI 재배선. v1.0.0.1 은 노트 상세 출처 링크(클릭/복사) + 라이브러리 다운로드 버튼 실동작 연결. 1.0 선언 릴리스(v1.0.0.0)는 React/PyWebView UI 전면 도입, 백엔드 STT/번역 파이프라인 재구조, License Elastic 2.0 채택을 묶은 하위 호환성 깨지는 변경.
+현재 버전: **v1.0.0.29** — UI 없이 파이프라인을 실행하는 CLI(`gurunote note`)와 동기 API(`run_pipeline`) 추가. STT 엔진·LLM provider 목록을 `gurunote/options.py` 로 단일화했습니다. 파이프라인 동작 변경은 없습니다.
 
 ### v1.0.0.0 주요 변경 (요약)
 
@@ -519,6 +561,13 @@ GuruNote/
 ---
 
 ## ❓ 자주 묻는 질문 (FAQ)
+
+**Q. 창을 띄우지 않고 자동화하거나 에이전트에 연결할 수 있나요?**
+네. `gurunote note <URL|파일>` 이 같은 파이프라인을 UI 없이 실행합니다. `--json` 을 주면
+`ok` / `job_id` / `full_md` / `summary_md` / `error` 를 담은 JSON 이 stdout 으로 나오고,
+진행 로그는 stderr 로 분리되므로 그대로 파이프에 넘길 수 있습니다. 파이썬에서는
+`from gurunote.pipeline import run_pipeline` 을 씁니다. 종료 코드는 성공 `0`,
+파이프라인 실패 `1`, 입력 오류 `2`, `--timeout` 초과 `124` 입니다.
 
 | 질문 | 답변 |
 |---|---|

@@ -16,6 +16,10 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.scripts]
+# UI 없이 파이프라인을 돌리는 진입점. 사람이 터미널에서, 에이전트가 --json 으로 쓴다.
+gurunote = "gurunote.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=9.0",

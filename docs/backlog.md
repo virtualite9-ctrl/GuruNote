@@ -10,6 +10,21 @@
 
 ## 대기 중
 
+### B13: 에이전트·스크립트가 쓸 수 있게 모듈화
+
+- 목표: 사람이 창을 띄우는 것 외의 경로로도 파이프라인과 기능을 쓸 수 있게 한다.
+- 1단계 **완료** (9/14, v1.0.0.29): `gurunote/pipeline.py` 동기 API + `gurunote/cli.py`
+  (`note`/`engines`/`providers`) + `gurunote/options.py` 단일 출처. 테스트 33건.
+- 2단계 not_started: `gurunote/llm.py` 3447행 / 함수 61개(public 12, private 49) 분할.
+  client / translate / summarize / entities / postprocess / grounding 으로 나누고
+  `gurunote/llm.py` 는 re-export shim 으로 남긴다 (B09 의 `gui.py` 방식). 테스트가
+  `gurunote.llm` 에서 import 하므로 shim 이 하위 호환을 유지한다.
+- 3단계 not_started: `webui/bridge.py` 의 `Api` 클래스(public 메서드 33개)에서 GUI 전용
+  (`bind_window`, `pick_file`) 을 뺀 서비스 계층 추출. webview bridge 와 CLI 가 같은 코드를
+  호출하게 한다.
+- 4단계 not_started: 3단계 서비스 위에 SKILL.md 또는 MCP 서버.
+- 우선순위: P1 (진입점이 늘어날수록 중복·드리프트 비용이 커짐)
+
 ### Phase 5: STT 의미 단위 재분할 + 2-pass default on
 
 - 상태: **완료** (5/24, commit `527d2ea` + default on `feat: Phase 5 재분할 + 2-pass default on`)
