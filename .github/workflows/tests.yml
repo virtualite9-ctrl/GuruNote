@@ -1,0 +1,58 @@
+name: Tests
+
+# 단위 테스트 CI.
+#
+# 이 저장소의 unit test 는 무거운 STT 엔진(WhisperX / mlx-whisper / pyannote)이나
+# CUDA/Metal toolchain 을 필요로 하지 않는다. tests/ 가 건드리는 모듈
+# (gurunote/types.py, gurunote/llm.py, gurunote/stt_mlx.py) 은 표준 라이브러리와
+# pyyaml, openai 만 import 하고 플랫폼 전용 패키지(mlx 등)는 함수 안에서 지연
+# import 하기 때문이다. 따라서 ubuntu 러너에서 pyproject 의 dev 의존성만으로
+# 전부 실행된다. 약 180건이 2초 정도에 끝난다.
+#
+# slow marker(실제 LLM 호출, pytest.ini 에 정의)는 외부 엔드포인트에 의존하므로
+# CI 에서 제외한다. 본인 manual 실행 대상으로 남긴다.
+#
+# 데스크톱 패키지 빌드는 release-desktop.yml 이 태그에서만 담당한다. 이 workflow 는
+# 패키징하지 않고 릴리스도 만들지 않는다.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: Unit tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # pyproject.toml 의 requires-python = ">=3.10" 하한과 현행 버전을 함께 검사.
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run unit tests
+        run: python -m pytest -m "not slow" -q

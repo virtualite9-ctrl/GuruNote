@@ -19,6 +19,18 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=9.0",
+    # tests/test_xgrammar_healthcheck.py 가 `patch("openai.OpenAI")` 로 클라이언트를
+    # 모킹한다. 실제 호출은 하지 않지만 patch 대상 문자열을 해석하려면 모듈이
+    # import 가능해야 하므로 test 의존성이다.
+    "openai>=1.30",
 ]
 
 # pytest 설정은 pytest.ini 가 source-of-truth (중복 방지).
+
+# flat-layout 자동 탐색은 `verify_results/` (검증 보고서 100여 개가 든 데이터
+# 디렉토리) 까지 top-level 패키지 후보로 보고 "Multiple top-level packages
+# discovered" 로 빌드를 거부한다. 실제 배포 대상은 gurunote 와 그 하위
+# 패키지뿐이므로 명시적으로 한정한다. 이것이 없으면 `pip install -e .` 자체가
+# 실패한다.
+[tool.setuptools.packages.find]
+include = ["gurunote*"]

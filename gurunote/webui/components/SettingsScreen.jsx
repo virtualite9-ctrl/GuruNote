@@ -718,7 +718,7 @@ function SettingsAbout() {
         </div>
         <div className="settings-about__name">GuruNote</div>
         <div className="settings-about__version">
-          v{appInfo?.version || '1.0.0.0'}
+          v{appInfo?.version || '1.0.0.1'}
         </div>
         <div className="settings-about__desc">
           유튜브 링크 한 줄로 한국어 요약본을 생성합니다.

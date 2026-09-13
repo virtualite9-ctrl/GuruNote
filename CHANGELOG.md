@@ -7,6 +7,31 @@
 
 ## [Unreleased]
 
+## [1.0.0.1] - 2026-09-13
+
+### Added
+
+- 단위 테스트 CI (`.github/workflows/tests.yml`). push / pull request / 수동 실행에서
+  `pytest -m "not slow"` 를 Python 3.10 / 3.11 / 3.12 로 실행한다. `tests/` 가 건드리는
+  모듈은 표준 라이브러리와 pyyaml, openai 만 import 하므로 STT 엔진이나 CUDA/Metal
+  toolchain 없이 ubuntu 러너에서 전부 돌아간다 (약 180건, 2초).
+- `openai` 를 `dev` optional-dependency 로 선언. `tests/test_xgrammar_healthcheck.py` 가
+  `patch("openai.OpenAI")` 로 클라이언트를 모킹하므로 patch 대상 해석에 모듈 import 가
+  필요하다. 그동안 선언 없이 우연히 설치돼 있던 환경에서만 통과하던 상태였다.
+
+### Fixed
+
+- `pip install -e .` 이 "Multiple top-level packages discovered in a flat-layout:
+  ['gurunote', 'verify_results']" 로 실패하던 문제. `verify_results/` 는 검증 보고서
+  디렉토리인데 flat-layout 자동 탐색이 패키지 후보로 집계했다.
+  `[tool.setuptools.packages.find] include = ["gurunote*"]` 로 배포 대상을 한정했다.
+  이 때문에 선언된 `dev` extra 를 쓸 수 없었고 CI 도 붙일 수 없었다.
+
+### Notes
+
+- 기능·파이프라인 동작 변경 없음. STT / 번역 / 내보내기 경로는 손대지 않았다.
+- `slow` marker (실제 LLM 호출) 는 CI 에서 제외한다. 본인 manual 실행 대상으로 남긴다.
+
 ## [1.0.0.0] - 2026-05-24
 
 > **1.0 선언 릴리스.** `redesign/tailwind-v2` 브랜치에서 누적된 4월 24일 이후의
@@ -1358,7 +1383,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v0.8.0.6...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.1...HEAD
+[1.0.0.1]: https://github.com/avlp12/GuruNote/compare/v1.0.0.0...v1.0.0.1
 [1.0.0.0]: https://github.com/avlp12/GuruNote/compare/v0.8.0.6...v1.0.0.0
 [0.8.0.6]: https://github.com/avlp12/GuruNote/compare/v0.8.0.5...v0.8.0.6
 [0.8.0.5]: https://github.com/avlp12/GuruNote/compare/v0.8.0.4...v0.8.0.5
