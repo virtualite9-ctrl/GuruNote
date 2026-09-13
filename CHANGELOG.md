@@ -7,6 +7,34 @@
 
 ## [Unreleased]
 
+## [1.0.0.2] - 2026-09-13
+
+### Changed
+
+- `PipelineWorker` 를 `gui.py` 에서 `gurunote/pipeline_worker.py` 로 분리 (backlog B09).
+  React/PyWebView 진입점이 `gurunote/webui/session.py` 에서 `from gui import PipelineWorker`
+  로 CustomTkinter 파일을 끌어오고 있었다. `gui.py` 는 모듈 레벨에서 customtkinter 를
+  import 하고 stdout/stderr 을 로그 파일로 돌리는 부수효과를 실행하므로, React 경로가
+  UI 툴킷과 그 부수효과를 떠안는 구조였다. 클래스 본문은 248행 그대로 옮겼다 (바이트 동일).
+- `gurunote/webui/session.py` 의 워커 import 를 모듈 레벨로 올렸다. 미루던 이유(`gui` 의
+  부수효과)가 없어졌다. 낡은 주석과 docstring 의 `gui.PipelineWorker` 표기도 함께 고쳤다.
+- `gui.py` 는 하위 호환을 위해 `PipelineWorker` 를 계속 re-export 한다. 이 분리로
+  불필요해진 import 11개 (`tempfile`, `transcribe`, `install_tee`, `autosave_result` 등) 를
+  정리했다. 4348행 → 4098행.
+
+### Added
+
+- `tests/test_pipeline_worker_extraction.py` — 워커와 React 어댑터가 UI 툴킷을 적재하지
+  않는지 별도 인터프리터에서 확인하고, `gui.py` 의 re-export 유지와 중복 정의 부재를 검사한다.
+- `yt-dlp` 를 `dev` optional-dependency 로 선언. `gurunote.audio` 가 모듈 레벨에서
+  import 하고 `gurunote.pipeline_worker` 가 그 모듈을 끌어오므로 import 검사에 필요하다.
+
+### Notes
+
+- 파이프라인 동작 변경 없음. 클래스 본문이 이전 버전과 바이트 동일하다.
+- `gui.py` 는 customtkinter 를 요구해서 이 테스트 환경에서 import 할 수 없다. 해당 검사는
+  소스(AST) 수준으로 수행한다.
+
 ## [1.0.0.1] - 2026-09-13
 
 ### Added
@@ -1383,7 +1411,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.1...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.2...HEAD
+[1.0.0.2]: https://github.com/avlp12/GuruNote/compare/v1.0.0.1...v1.0.0.2
 [1.0.0.1]: https://github.com/avlp12/GuruNote/compare/v1.0.0.0...v1.0.0.1
 [1.0.0.0]: https://github.com/avlp12/GuruNote/compare/v0.8.0.6...v1.0.0.0
 [0.8.0.6]: https://github.com/avlp12/GuruNote/compare/v0.8.0.5...v0.8.0.6

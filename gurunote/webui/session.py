@@ -1,7 +1,7 @@
 """Pipeline session adapter — bridges PipelineWorker queues to the JS event bus.
 
-Each ``PipelineSession`` owns a single ``gui.PipelineWorker`` (imported at first
-use) and a recurring ``threading.Timer`` poller. The poller drains the worker's
+Each ``PipelineSession`` owns a single ``gurunote.pipeline_worker.PipelineWorker``
+and a recurring ``threading.Timer`` poller. The poller drains the worker's
 three queues (msg / progress / result) every 100 ms and emits events into the
 webview via ``window.evaluate_js("window.__emit(...)")``.
 
@@ -19,7 +19,7 @@ Event shapes
                   'korean'/'english'/'summary' tab 데이터 source.)
 
 ``autosave_path`` is sniffed from the ``[Autosave] <path>`` log line that
-``gui.PipelineWorker`` emits after ``autosave_result(...)`` writes. It is
+``PipelineWorker`` emits after ``autosave_result(...)`` writes. It is
 informational only (the front-end displays it alongside the result); the
 actual autosave write happens in the worker regardless of UI state.
 
@@ -36,11 +36,13 @@ import sys
 import threading
 from typing import Any
 
+from gurunote.pipeline_worker import PipelineWorker
+
 _ACTIVE: dict[str, "PipelineSession"] = {}
 
 _LOG_BATCH_THRESHOLD = 50
 _POLL_INTERVAL_SEC = 0.1  # matches gui.py's self.after(100, ...)
-_AUTOSAVE_LOG_PREFIX = "[Autosave] "  # emitted by gui.PipelineWorker._run after autosave_result()
+_AUTOSAVE_LOG_PREFIX = "[Autosave] "  # emitted by PipelineWorker._run after autosave_result()
 
 
 def get_session(job_id: str) -> "PipelineSession | None":
@@ -61,11 +63,6 @@ class PipelineSession:
     """
 
     def __init__(self, window: Any, source: dict) -> None:
-        # Deferred import — ``gui`` has module-level side effects
-        # (log_redirect, ctk theme) that we accept but want to delay until the
-        # first pipeline run rather than import-time of this module.
-        from gui import PipelineWorker  # noqa: PLC0415
-
         kind = source["kind"]
         value = source["value"]
 

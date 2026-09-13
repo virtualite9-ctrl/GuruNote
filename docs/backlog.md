@@ -66,8 +66,12 @@
 - 동작: 파이프라인 워커 로직 (`PipelineWorker` 클래스) 을 CustomTkinter UI 파일 (`gui.py`) 에서 떼어내 `gurunote/pipeline_worker.py` 신규 모듈로 이동
 - 배경: v1.0 React/PyWebView UI (`app_webview.py`) 가 `gurunote/webui/session.py:67` 에서 `from gui import PipelineWorker` 로 옛 CustomTkinter UI 파일에 의존. `gui.py` 를 legacy 로 정리 부재 — React 가 깨짐. 기술 부채.
 - 작업 범위: `gui.py` 안 `PipelineWorker` 클래스 추출, import 갱신 (`webui/session.py`, `gui.py` 자체), test 통과 확인
-- 재검토 조건: 옛 진입점 (`gui.py`/`app.py`) 폐기 시점 또는 React 진입점 단일화 결정 시
-- 상태: not_started
+- 상태: **완료** (9/13, v1.0.0.2)
+- 결과: `gurunote/pipeline_worker.py` 신설 (클래스 본문 248행 바이트 동일 이전). `webui/session.py` 는
+  모듈 레벨 import 로 전환, `gui.py` 는 하위 호환 re-export 유지 + 불필요해진 import 11개 정리
+  (4348행 → 4098행). `tests/test_pipeline_worker_extraction.py` 6건이 워커/React 어댑터가 UI 툴킷을
+  적재하지 않음을 별도 인터프리터에서 확인. 전체 186건 통과.
+- 남은 것: 옛 진입점 (`gui.py`/`app.py`) 자체의 폐기와 React 진입점 단일화는 별도 결정 사항.
 - 우선순위: P3 (1.0 후 정리)
 - 비용: 중간 (~1 세션, 코드 이동 + import 갱신 + 회귀 테스트)
 
