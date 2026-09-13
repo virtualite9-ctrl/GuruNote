@@ -26,6 +26,7 @@ from gurunote.history import JobLogger, new_job_id, save_job
 from gurunote.llm import (
     LLMConfig,
     extract_metadata,
+    load_speaker_names,
     summarize_translation,
     translate_transcript,
 )
@@ -198,6 +199,8 @@ class PipelineWorker:
 
             # Step 5
             self._log("[Step 5] 마크다운 조립 중...")
+            # 영어 원문 섹션 화자 라벨 → English 실명 (디스크 cache 재사용, 없으면 빈 dict).
+            speaker_names = load_speaker_names(video_ctx)
             full_md = build_gurunote_markdown(
                 title=audio.video_title,
                 webpage_url=audio.webpage_url,
@@ -214,6 +217,8 @@ class PipelineWorker:
                 tags=metadata.get("tags", []),
                 # Phase 2B-3-backend 3b-1: 한국어 분기 + 동적 원문 섹션 헤더에 사용.
                 detected_language=transcript.language or None,
+                # 영어 원문 섹션 화자 실명 매핑 (없으면 라벨 fallback).
+                speaker_names=speaker_names,
             )
             self._log("[Done] GuruNote 생성 완료")
             self._set_progress(1.0)

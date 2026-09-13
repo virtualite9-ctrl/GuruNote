@@ -8,6 +8,7 @@ Step 3 & 4: LLM 기반 한국어 번역 + GuruNote 스타일 마크다운 요약
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import logging
@@ -68,6 +69,9 @@ _SHARED_LANG_RULES = """
 - AI/기술: AI Native→AI 네이티브, Energy Intelligence→에너지 인텔리전스,
           Digital Twin→디지털 트윈, SimReady→심레디,
           Brownfield→브라운필드, Liquid Cooling→액체 냉각
+- 목록에 없는 유명 인물·기업은 **철자가 아니라 통용 발음**으로 음차하라
+  (예: Palmer Luckey→팔머 럭키[러커이 ✗], Rick Rieder→릭 리더[리크 ✗]).
+  외래어 표기법 규칙은 통용 표기를 모를 때만 쓰는 fallback.
 
 ## 한국어 중복 출력 절대 금지 (괄호 안은 영문 원본 전용)
 - 정합: 슈나이더 일렉트릭(Schneider Electric) ✓ / 판카즈 샤르마(Pankaj Sharma) ✓
@@ -125,8 +129,10 @@ TRANSLATION_SYSTEM_PROMPT = """\
 4. LLM, RAG, Fine-tuning, Transformer, Embedding, Inference, Diffusion 등
    IT/AI 전문 용어는 직역하지 말고 영문을 병기하거나 업계 통용어로 자연스럽게
    번역해. (예: "파인튜닝(Fine-tuning)", "검색 증강 생성(RAG)")
-5. "you know", "I mean", "kind of", "like" 같은 구어체 추임새는 빼고,
-   가독성 높은 자연스러운 한국어 인터뷰 톤으로 다듬어.
+5. 원문의 모든 절·정보를 한국어로 빠짐없이 옮긴다. 추임새(you know, I mean, like,
+   kind of, sort of 등)와 군더더기 반복만 정리하고, 의미를 담은 절은 절대 생략하지
+   않는다. 한국어 어순·표현으로 자연스럽게 재구성하되, 원문에 없는 내용 추가나 의미
+   축약은 금지.
 6. 출력은 오직 번역된 스크립트만. 설명/머리말/끝맺음 문장 금지.
 7. **"### 영상 컨텍스트" 섹션은 화자/챕터 추론용 참고 메타데이터일 뿐 — 출력에
    그대로 포함하지 마. 컨텍스트의 제목/채널/게시일/태그/챕터/자막 발췌 등을
@@ -141,7 +147,17 @@ TRANSLATION_SYSTEM_PROMPT = """\
    같은 timestamp + 같은 Speaker 가 연속 반복되면 1회만.
 10. **고유명사(인명/지명/회사명/상품명) 한국어 표기 일관성:**
 
-    [핵심 원칙 — 국립국어원 외래어 표기법 정합]
+    [표기 결정 우선순위 — 위에서 아래로]
+    1. 한국 언론·업계에서 **이미 통용되는 표기**를 최우선 (유명 인물·기업·제품).
+       **철자가 아니라 발음**을 기준으로 음차하라 — 네가 아는 통용 발음을 끌어내라.
+       예) Palmer Luckey → 팔머 럭키 (러커이 ✗ — `-ey` 는 [i] 발음),
+           Rick Rieder → 릭 리더 (리크 ✗ — `Rick` 의 [ɪ] 는 '릭'),
+           Demis Hassabis → 데미스 하사비스, Jensen Huang → 젠슨 황.
+    2. 아래 [자주 등장 통용 표기] 목록에 있으면 그대로 사용.
+    3. 위 1·2 로 정할 수 없을 때만 아래 외래어 표기법 규칙으로 음차 (fallback).
+       — 외래어 규칙이 통용 표기를 덮어쓰지 않는다. 규칙은 모르는 이름의 마지막 수단.
+
+    [핵심 원칙 — 국립국어원 외래어 표기법 정합 (위 3번 fallback 용)]
     - 자음: [k] → ㅋ(어두), ㄱ(받침) / [t] → ㅌ(어두), ㅅ(받침) /
       [tʃ] → 치(어두), ㅊ(어말) / [ʃ](sh) → 슈(모음 앞), 시(어말) /
       [n](어말) → ㄴ
@@ -216,6 +232,28 @@ TRANSLATION_SYSTEM_PROMPT = """\
     - dict 영역 entity 의 두 번째 이후 등장 시 영문 병기 부재 (이전 chunk 에서
       이미 첫 등장 병기 완료 가정).
     - dict 외부의 신규 entity 는 Rule 10 통용 표기 + Rule 2 첫 등장 영문 병기 정합.
+13. **환각 금지** — 원문에 없는 표현·내용·중국어식 한자어 대조구(예: 而非, 不過)·임의의
+    부연 설명을 추가하지 않는다. 번역 결과의 모든 문장은 원문에 대응이 있어야 한다.
+14. **누락 금지** — 자조·관용·삽입절(특히 'which is what I am', 'you know what I mean'
+    같은 자기 지칭/부연 절)을 빠짐없이 옮긴다. 추임새와 의미 있는 삽입절을 혼동하지 않는다.
+15. **영어 단어 미번역 금지** — 영어 단어를 한국어 문장에 그대로 두지 않는다. 단 예외:
+    영문 병기 '한국어(English)', 약어(AI, GPU, HBM, ETF 등), 모델/제품명(GPT, ChatGPT,
+    Claude 등), 회사명. 일반 영단어(acceptable, reasonable, fine 등)는 반드시 한국어로 옮긴다.
+
+## 충실 의역 — 좋은 예 / 나쁜 예
+
+원문: 'As an American who likes innovation and who likes action as opposed to being a cultural idiot, which is what I am, I'm not big on the euro.'
+
+✓ 좋은 예 (충실): '혁신과 행동을 좋아하는 미국인으로서 — 저는 문화적으로는 바보이긴 하지만요 — 유로에는 큰 관심이 없어요.'
+- 'as opposed to being a cultural idiot'(자조 농담)을 직역, 'which is what I am'(자기 지칭) 살림, 한국어 어순 자연스러움
+✗ 나쁜 예 (환각·누락·정반대 해석): '혁신과 행동을 선호하는 문화적 무지(而非 문화적 정체)를 택하는 것보다 낫다고 생각하는 미국인으로서, 저는 유로화에 크게 관심이 없어요.'
+- 而非는 원문에 없는 환각, 'which is what I am' 누락, 자조 농담을 정반대로 뒤집음
+
+원문: '10% or less tariffs are acceptable as a consumption tax to curb overconsumption.'
+
+✓ 좋은 예: '10% 이하의 관세는 과소비를 억제하는 소비세로 용인할 수 있다.'
+✗ 나쁜 예: '10% 이하 관세는acceptable하며...'
+- 일반 영단어(acceptable)를 한국어로 옮기지 않고 띄어쓰기까지 붙음
 """ + _SHARED_LANG_RULES
 
 
@@ -243,6 +281,20 @@ SUMMARY_SYSTEM_PROMPT = """\
 - "전체 스크립트 번역본" 섹션은 호출자가 별도로 붙이므로 여기에 포함하지 마.
 - **공통 룰**: 한자/일본어 mix 절대 부재 + 통용 표기 dict 정합 + 첫 등장 영문 병기.
   아래 [출력 언어 + 표기 — 양쪽 prompt 공통 룰] 섹션 정합.
+
+충실도 룰 (요약은 압축하되 왜곡·날조는 금지):
+- **환각 금지** — 입력 번역본에 실제로 있는 내용·인물만 쓴다. 입력에 등장하지 않는
+  인물·기관·수치·발언을 새로 만들어 넣지 마라.
+  예) 입력 본문에 없는 'Janet Yellen(재닛 옐런)', 'Jerome Powell(제롬 파월)' 을
+      요약에 등장시키면 안 됨 (입력에 그 이름이 없으면 쓰지 마).
+- **영어 단어 미번역 금지** — 영어 단어를 한국어 문장에 그대로 두지 않는다. 일반
+  영단어는 반드시 한국어로 옮긴다. 단 예외: 영문 병기 '한국어(English)', 약어(AI,
+  GPU, ETF 등), 모델/제품명, 회사명.
+  예) '개인 투자자들의 formidable(강력한) 존재감' ✗ → '개인 투자자들의 강력한 존재감' ✓
+- **인명 표기 일관** — 입력 번역본에 쓰인 인명 표기를 그대로 따른다. 같은 인물을
+  요약에서 새로 음차하지 마라. 첫 등장 영문 병기는 유지.
+  예) 본문이 '스탠 드러켄밀러' 면 요약도 '스탠 드러켄밀러' — '스턴 드러켄밀러' 처럼
+      바꾸지 말 것.
 """ + _SHARED_LANG_RULES
 
 
@@ -833,6 +885,49 @@ def post_process_cjk(
     return "\n\n".join(processed)
 
 
+def post_process_cjk_text(
+    text: str,
+    config: "LLMConfig",
+    log: Optional[ProgressFn] = None,
+) -> str:
+    """segment 없는 텍스트(제목·요약)용 CJK 후처리 — Sub-path A 사전 + B LLM 재매핑.
+
+    본문 ``post_process_cjk`` 와 같은 A/B 골격을 재사용하되, **Sub-path C(영문 fallback)
+    는 제외** — 제목·요약은 segment timestamp 매핑이 없기 때문. A·B 후에도 남는 한자는
+    그대로 둔다 (드묾 — 사용자 노트 편집으로 보정; 비우거나 추가 재요청 안 함).
+
+    한자 없으면 즉시 반환 (비용 0). 본문 후처리(``post_process_cjk``)는 건드리지 않는다.
+    """
+    if not text or not _detect_cjk_outside_brackets(text):
+        return text
+    log_fn = log or (lambda _msg: None)
+    lookup = _load_cjk_lookup()
+    a_hits = 0
+    b_hits = 0
+    out: List[str] = []
+    for part in text.split("\n\n"):
+        if not _detect_cjk_outside_brackets(part):
+            out.append(part)
+            continue
+        # Sub-path A — 사전 lookup
+        after_a = _apply_cjk_dict_lookup(part, lookup)
+        if not _detect_cjk_outside_brackets(after_a):
+            a_hits += 1
+            out.append(after_a)
+            continue
+        # Sub-path B — LLM 재매핑 (성공 시 clean, 실패 시 None)
+        after_b = _llm_remap_cjk(after_a, config, max_retries=3)
+        if after_b is not None:
+            b_hits += 1
+            out.append(after_b)
+            continue
+        # Sub-path C 제외 — A 적용본(최선) 유지, 잔재는 그대로
+        out.append(after_a)
+    if log and (a_hits or b_hits):
+        log_fn(f"   🔧 CJK 후처리(제목·요약) — Sub-A {a_hits}건, Sub-B {b_hits}건")
+    return "\n\n".join(out)
+
+
 def _detect_unexpected_changes(
     original: str,
     canonical: str,
@@ -1004,6 +1099,117 @@ _SPEAKER_LINE_RE = re.compile(
 _ENGLISH_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z\s\.\-']*$")
 
 
+# 병기 패턴: 한국어 문자 바로 뒤의 `(English)` — 괄호 안이 ASCII 영문만 (한글 부재).
+# "OpenAI(오픈AI)" 처럼 괄호 안에 한글이 있으면 매칭 부재 (영문 원어 병기만 대상).
+_ENGLISH_ANNOT_RE = re.compile(r"(?<=[가-힣])\(([A-Za-z][A-Za-z0-9\s.\-']*)\)")
+
+
+def _correct_english_annotations(
+    text: str, source_corpus: str, log: Optional[ProgressFn] = None
+) -> str:
+    """`한국어(English)` 병기의 영문 철자를 **소스에 실재하는 철자**로 결정론적 검증.
+
+    LLM 이 영문 원어를 자유 생성하다 철자를 오염시키는 문제(예: Anduril→Danduril,
+    제목 포함) 차단. 소스(transcript 전문 + 제목)는 정답 철자의 근거.
+
+    각 병기 영문에 대해:
+      1. 소스에 (대소문자 무시) 그대로 있으면 → 소스 철자/케이싱으로 정규화.
+      2. 단일 토큰이 소스에 없으면 → 소스 단어 중 충분히 가까운 것(보수적 cutoff)으로 교정.
+      3. 다단어는 모든 토큰이 소스 근거를 가질 때만 채택, 아니면 생략.
+      4. 소스에 근거 없음 → 병기 삭제 (한국어만 남김, 틀린 철자 박지 않음).
+
+    LLM 무관 순수 함수. 한국어 표기·화자 라벨·timestamp 는 건드리지 않는다.
+    """
+    if not text or not source_corpus:
+        return text
+
+    corpus_lower = source_corpus.lower()
+    # 소스 영문 단어 풀 + 케이싱 복원 맵 (lower → 첫 등장 원본 케이싱).
+    # 순수 알파벳 토큰으로 분리 — 소유격/문장부호 (예: "Anduril's", "U.S.") 가
+    # 매칭을 가리지 않도록 ("Anduril's" → "Anduril" + "s").
+    case_map: dict = {}
+    for w in re.findall(r"[A-Za-z]+", source_corpus):
+        case_map.setdefault(w.lower(), w)
+    pool_lower = list(case_map.keys())  # 대소문자 무시 fuzzy 매칭용
+
+    stats = {"corrected": 0, "dropped": 0}
+
+    def _restore_case(tokens: list) -> str:
+        return " ".join(case_map.get(t.lower(), t) for t in tokens)
+
+    def _fix(eng: str):
+        e = eng.strip()
+        toks = e.split()
+        # 1) 전체 구가 소스에 그대로 → 케이싱만 소스 정규화 (과교정 부재).
+        if e.lower() in corpus_lower:
+            return _restore_case(toks)
+        # 2) 단일 토큰 → 소스 단어 중 보수적 최근접 교정 (대소문자 무시 비교).
+        if len(toks) == 1:
+            m = difflib.get_close_matches(e.lower(), pool_lower, n=1, cutoff=0.84)
+            if m:
+                stats["corrected"] += 1
+                return case_map[m[0]]
+            stats["dropped"] += 1
+            return None
+        # 3) 다단어 → 토큰별 소스 근거(정확/최근접) 전부 확보 시만 채택.
+        fixed = []
+        for t in toks:
+            if t.lower() in corpus_lower:
+                fixed.append(case_map[t.lower()])
+            else:
+                mm = difflib.get_close_matches(t.lower(), pool_lower, n=1, cutoff=0.84)
+                if not mm:
+                    stats["dropped"] += 1
+                    return None
+                fixed.append(case_map[mm[0]])
+        if fixed != toks:
+            stats["corrected"] += 1
+        return " ".join(fixed)
+
+    def _repl(m: "re.Match") -> str:
+        fixed = _fix(m.group(1))
+        return "" if fixed is None else f"({fixed})"
+
+    out = _ENGLISH_ANNOT_RE.sub(_repl, text)
+    if log and (stats["corrected"] or stats["dropped"]):
+        log(
+            f"   🔧 영문 병기 소스 검증: 교정 {stats['corrected']}건 / "
+            f"생략 {stats['dropped']}건"
+        )
+    return out
+
+
+# `한국어 인명(English Name)` 병기 — 한국어 부분 + 영문 부분 둘 다 캡처.
+# 한국어 인명 = `(` 직전의 한글 단어 run (공백/가운뎃점 연결). 콜론·기타 문자는 경계.
+_KOREAN_ANNOT_RE = re.compile(
+    r"([가-힣]+(?:[ ·][가-힣]+)*)\(([A-Za-z][A-Za-z\s.\-']*)\)"
+)
+
+
+def _correct_korean_in_annotations(text: str, canonical: dict) -> str:
+    """`한국어(English)` 병기에서 **English key 가 통용 dict 에 있으면 한국어를 dict 표기로
+    강제 교정** (제목용). LLM 이 인명을 오음차해도(예: 스타니슬라프 드루킨밀러(Stan
+    Druckenmiller)) 영문 원어로 dict 조회 → 통용 표기(스탠 드러켄밀러)로 교체.
+
+    `_correct_english_annotations`(영문 철자 검증)와 방향이 반대 — 이쪽은 한국어를 고친다.
+    dict 미수록 영문은 불변 (과교정 부재). 영문 병기 없는 인명은 매칭 불가 → 그대로.
+    """
+    if not text or not canonical:
+        return text
+    eff = _canonical_effective(canonical)  # {english.lower(): 통용 한국어}
+    if not eff:
+        return text
+
+    def _repl(m: "re.Match") -> str:
+        korean, english = m.group(1), m.group(2)
+        canon = eff.get(english.strip().lower())
+        if canon and canon != korean:
+            return f"{canon}({english})"
+        return m.group(0)
+
+    return _KOREAN_ANNOT_RE.sub(_repl, text)
+
+
 def _extract_entities(translated_chunk: str) -> dict:
     """chunk 출력의 speaker line prefix 에서 entity 추출.
 
@@ -1134,7 +1340,9 @@ def _bootstrap_entity_cache_from_metadata(
         "예: SPEAKER A => Pankaj Sharma | 판카즈 샤르마\n"
         "추론 불가 라벨 부재 시 해당 라벨 생략 (fallback 은 코드가 catch).\n\n"
         "**한국어 표기 우선순위 (Part 1, 2 공통, 위에서 아래로)**:\n"
-        "1. 한국에서 이미 통용되는 표기 (예: Schneider Electric → 슈나이더 일렉트릭 [company])\n"
+        "1. 한국에서 이미 통용되는 표기를 최우선. **철자가 아니라 발음**을 기준으로 음차하라\n"
+        "   (예: Schneider Electric → 슈나이더 일렉트릭 [company], "
+        "Palmer Luckey → 팔머 럭키 [person] (러커이 ✗), Rick Rieder → 릭 리더 [person] (리크 ✗)).\n"
         "2. 통용 표기 부재 시 아래 외래어 표기법 표준 적용 (예: Pankaj Sharma → 판카즈 샤르마 [person])\n"
         "3. 그 외는 영어 자모 한글 대조표 정합 자유 출력"
         f"{loanword_section}\n"
@@ -1299,15 +1507,21 @@ def _save_entity_cache(
     """
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-    entities_list = [
-        {
+    def _entity_item(english: str, meta: dict) -> dict:
+        item = {
             "english": english,
             "korean": meta.get("korean", ""),
             "type": meta.get("type", "unknown"),
             "source": meta.get("source", "unknown"),
         }
-        for english, meta in entities.items()
-    ]
+        # 검색 그라운딩 교정 entity 만 원래 철자를 기록 (load_stt_corrections 가 역추적).
+        # 비교정 entity 는 필드 자체를 생략 — additive·optional (옛 cache·기존 동작 호환).
+        orig = (meta.get("original_english") or "").strip()
+        if orig:
+            item["original_english"] = orig
+        return item
+
+    entities_list = [_entity_item(english, meta) for english, meta in entities.items()]
 
     speakers_list = [
         {
@@ -1389,6 +1603,9 @@ def _load_entity_cache_full(
             "type": item.get("type", "unknown"),
             "source": item.get("source", "unknown"),
         }
+        orig = (item.get("original_english") or "").strip()
+        if orig:
+            entities[english]["original_english"] = orig
 
     speakers: dict = {}
     for item in data.get("speakers", []):
@@ -1400,6 +1617,139 @@ def _load_entity_cache_full(
         speakers[label] = {"english": english, "korean": korean}
 
     return {"entities": entities, "speakers": speakers}
+
+
+def load_speaker_names(video_context: Optional[dict]) -> dict:
+    """영상의 화자 라벨 → English 실명 매핑을 디스크 cache 에서 읽어 반환.
+
+    exporter 의 영어 원문 섹션이 화자 라벨(`A`/`B`) 대신 실명을 찍도록 쓰는 공개 헬퍼.
+    `translate_transcript` 가 번역 끝에 저장한 entity cache(`speakers` 필드)를 재사용한다.
+    cache_key 산출은 `translate_transcript` 의 저장 경로와 **같은 우선순위**(id → video_id
+    → title hash)를 따라 단일 출처를 유지.
+
+    Args:
+        video_context: `AudioDownloadResult.to_context_dict()` 형태 (id/video_id/title).
+
+    Returns:
+        `{라벨: English 실명}` dict. 다음 경우 모두 **빈 dict**(호출자는 라벨 fallback):
+        cache 파일 부재 / schema·spec 버전 불일치 (`_load_entity_cache_full` → None) /
+        speakers 부재 / phase2 off 로 저장된 적 없음 / 손상. 예외는 삼켜 깨지지 않는다.
+    """
+    if not video_context:
+        return {}
+    try:
+        cache_key = (
+            video_context.get("id")
+            or video_context.get("video_id")
+            or _compute_cache_key_from_title(video_context.get("title", ""))
+        )
+        if not cache_key:
+            return {}
+        full = _load_entity_cache_full(cache_key)
+        if not full:
+            return {}
+        speakers = full.get("speakers") or {}
+        names: dict = {}
+        for label, meta in speakers.items():
+            if not isinstance(meta, dict):
+                continue
+            english = (meta.get("english") or "").strip()
+            if label and english:
+                names[label] = english
+        return names
+    except Exception:  # noqa: BLE001 — 표시용 부가 정보라 실패는 빈 dict 로 degrade
+        return {}
+
+
+def _verify_entities_with_search(entity_cache: dict, search_fn: Callable, log=None) -> dict:
+    """검색 그라운딩 — person/company entity 의 영문 철자를 주입받은 search_fn 으로 검증·교정.
+
+    인명·회사명 STT 오인식(예: Kevin Wurst → Kevin Warsh)을 외부 근거로 통일. search_fn 은
+    의존성 주입 (`search_fn(name, hint) -> 교정 english | None`). 테스트는 가짜 함수를 주입.
+
+    동작:
+        - 대상: `type ∈ {person, company}` 이고 아직 검색 안 한 (source != "search") entity.
+        - 교정 시 entity_cache 의 key 를 정답으로 교체 — 원래 key 는 `original_english` 로
+          보존(frontmatter/원문 전파용), `source="search"` 마킹(재검색 방지).
+        - 같은 이름 불일치 통일: 한 영상에 Wurst·Warsh 둘 다 있으면 정답(Warsh)으로 병합.
+        - search_fn 실패(예외)는 마킹 안 함(다음 기회 재시도). 성공·교정불필요(None/동일)는
+          source 만 마킹.
+
+    Returns:
+        `{원래 english: 교정 english}` — 본문 병기 치환 + 소스 풀 주입에 쓴다. 교정 없으면 {}.
+    """
+    corrections: dict = {}
+    if not entity_cache:
+        return corrections
+    targets = [
+        eng for eng, meta in list(entity_cache.items())
+        if eng != "__speakers__" and isinstance(meta, dict)
+        and meta.get("type") in ("person", "company")
+        and meta.get("source") != "search"
+    ]
+    for eng in targets:
+        meta = entity_cache.get(eng)
+        if not isinstance(meta, dict) or meta.get("source") == "search":
+            continue  # 같은 run 에서 통일로 이미 처리된 경우 skip
+        searched_ok = True
+        try:
+            corrected = search_fn(eng, meta.get("type"))
+        except Exception:  # noqa: BLE001 — 검색 실패는 graceful skip (교정 없이 진행)
+            corrected = None
+            searched_ok = False  # 실패는 마킹 안 함 — 다음 기회 재시도 (transient 보호)
+        if not corrected or not isinstance(corrected, str) or corrected.strip() == eng:
+            if searched_ok:
+                meta["source"] = "search"  # 검색했으나 교정 불필요 — 마킹 (재검색 방지)
+            continue
+        corrected = corrected.strip()
+        existing = entity_cache.get(corrected)
+        new_meta = dict(existing) if isinstance(existing, dict) else dict(meta)
+        new_meta["source"] = "search"
+        new_meta["original_english"] = eng
+        new_meta.setdefault("type", meta.get("type", "unknown"))
+        if not new_meta.get("korean"):
+            new_meta["korean"] = meta.get("korean", "")
+        entity_cache[corrected] = new_meta
+        if eng != corrected:
+            entity_cache.pop(eng, None)
+        corrections[eng] = corrected
+    if log and corrections:
+        log("   🔎 검색 그라운딩 교정 "
+            f"{len(corrections)}건: " + ", ".join(f"{o}→{c}" for o, c in corrections.items()))
+    return corrections
+
+
+def load_stt_corrections(video_context: Optional[dict]) -> dict:
+    """검색 그라운딩 교정 쌍을 디스크 cache 에서 읽어 `{원래 english: 교정 english}` 반환.
+
+    exporter 가 영어 원문 섹션 표시 치환(Wurst→Warsh) + frontmatter 기록에 쓰는 공개 헬퍼.
+    `_verify_entities_with_search` 가 entity meta 에 남긴 `original_english` 를 역으로 모은다.
+    cache 부재·schema 불일치·교정 부재·손상은 모두 **빈 dict** (호출자는 교정 없이 진행).
+    load_speaker_names 와 같은 cache_key 우선순위(단일 출처).
+    """
+    if not video_context:
+        return {}
+    try:
+        cache_key = (
+            video_context.get("id")
+            or video_context.get("video_id")
+            or _compute_cache_key_from_title(video_context.get("title", ""))
+        )
+        if not cache_key:
+            return {}
+        full = _load_entity_cache_full(cache_key)
+        if not full:
+            return {}
+        out: dict = {}
+        for english, meta in (full.get("entities") or {}).items():
+            if not isinstance(meta, dict):
+                continue
+            orig = (meta.get("original_english") or "").strip()
+            if orig and english and orig != english:
+                out[orig] = english
+        return out
+    except Exception:  # noqa: BLE001 — 표시용 부가 정보라 실패는 빈 dict 로 degrade
+        return {}
 
 
 # =============================================================================
@@ -1518,12 +1868,223 @@ def _check_xgrammar_available(
 # =============================================================================
 # Step 3: 번역
 # =============================================================================
+# =============================================================================
+# 인명 통용 표기 결정론적 교정 (A 보완, 5/26)
+# =============================================================================
+# 원인: entity_cache / speaker_cache 의 한국어 표기가 bootstrap LLM(또는 디스크 캐시)
+# 의 first-seen 으로 고정 → 번역 프롬프트(A, Rule 10)가 우선순위상(캐시 1번) 못 이김.
+# 디스크 캐시 hit 시 LLM 자체 우회. → 캐시에 들어간 표기를 편집 가능한 통용 dict 로
+# **결정론적 교정** (B 의 _correct_english_annotations 와 같은 접근). dict 미수록 인명은
+# 건드리지 않는다 (과교정 부재).
+_CANONICAL_NAMES_PATH = Path.home() / ".gurunote" / "canonical_names.json"
+_CANONICAL_NAMES_DEFAULT = {
+    "Palmer Luckey": "팔머 럭키",
+    "Rick Rieder": "릭 리더",
+}
+
+
+def _load_canonical_names() -> dict:
+    """통용 표기 dict 로드 — 신 구조 `{English: {"auto": str, "user": str}}`.
+
+    - auto = GuruNote 가 작업 중 자동 기록한 표기. user = 사용자가 수정한 표기.
+    - 옛 flat 구조 `{English: "한국어"}` 는 값을 **user 로 마이그레이션** (사용자가 넣은
+      초기값으로 간주). 파일 없음/손상 시 기본값(user)으로 생성.
+    """
+    raw = None
+    try:
+        if _CANONICAL_NAMES_PATH.exists():
+            data = json.loads(_CANONICAL_NAMES_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                raw = data
+    except Exception:  # noqa: BLE001 — 손상은 기본값으로 degrade
+        raw = None
+
+    if raw is None:
+        out = {k: {"auto": "", "user": v} for k, v in _CANONICAL_NAMES_DEFAULT.items()}
+        _save_canonical_names(out)  # 최초 생성
+        return out
+
+    out: dict = {}
+    for k, v in raw.items():
+        if not k:
+            continue
+        if isinstance(v, dict):  # 신 구조
+            out[str(k)] = {
+                "auto": str(v.get("auto") or ""),
+                "user": str(v.get("user") or ""),
+            }
+        elif v:  # 옛 flat → 값을 user 로 마이그레이션
+            out[str(k)] = {"auto": "", "user": str(v)}
+    return out
+
+
+def _save_canonical_names(canonical: dict) -> None:
+    """`{English: {auto, user}}` atomic 저장 (tmp → os.replace). auto/user 둘 다 빈
+    항목은 제외. 실패는 best-effort (다음 기회에 재저장)."""
+    clean: dict = {}
+    for k, v in canonical.items():
+        if not k:
+            continue
+        if isinstance(v, dict):
+            a, u = str(v.get("auto") or "").strip(), str(v.get("user") or "").strip()
+        else:  # 방어 — flat 잔존
+            a, u = "", str(v).strip()
+        if a or u:
+            clean[str(k)] = {"auto": a, "user": u}
+    try:
+        _CANONICAL_NAMES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _CANONICAL_NAMES_PATH.with_name(_CANONICAL_NAMES_PATH.name + ".tmp")
+        tmp.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, _CANONICAL_NAMES_PATH)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _canonical_effective(canonical: dict) -> dict:
+    """English.lower() → 적용할 한국어 (**user 우선**, 없으면 auto). 둘 다 없으면 제외.
+    신 구조·옛 flat 모두 수용 (호출부 호환)."""
+    out: dict = {}
+    for k, v in canonical.items():
+        if not k:
+            continue
+        if isinstance(v, dict):
+            kor = (v.get("user") or v.get("auto") or "").strip()
+        else:
+            kor = str(v).strip()
+        if kor:
+            out[str(k).lower()] = kor
+    return out
+
+
+def _record_auto_spellings(auto_acc: dict, cache: dict, kind: str) -> None:
+    """캐시의 **교정 전 raw** 한국어 표기를 auto 누적 dict 에 모은다 (English → korean).
+    kind="entity": `{Eng: {korean}}`, kind="speaker": `{label: {english, korean}}`."""
+    if not cache:
+        return
+    if kind == "entity":
+        for eng, meta in cache.items():
+            if eng == "__speakers__" or not isinstance(meta, dict):
+                continue
+            kor = (meta.get("korean") or "").strip()
+            if eng.strip() and kor:
+                auto_acc[eng.strip()] = kor
+    else:  # speaker
+        for _label, meta in cache.items():
+            if not isinstance(meta, dict):
+                continue
+            eng = (meta.get("english") or "").strip()
+            kor = (meta.get("korean") or "").strip()
+            if eng and kor:
+                auto_acc[eng] = kor
+
+
+def _persist_auto_spellings(auto_acc: dict) -> None:
+    """누적된 auto 표기를 dict 파일에 병합 저장 — **auto 만 갱신, user 불변**."""
+    if not auto_acc:
+        return
+    try:
+        canonical = _load_canonical_names()
+        changed = False
+        for eng, kor in auto_acc.items():
+            entry = canonical.get(eng)
+            if entry is None:
+                canonical[eng] = {"auto": kor, "user": ""}
+                changed = True
+            elif entry.get("auto") != kor:
+                entry["auto"] = kor  # user 는 건드리지 않음
+                changed = True
+        if changed:
+            _save_canonical_names(canonical)
+    except Exception:  # noqa: BLE001 — best-effort
+        pass
+
+
+def _apply_canonical_to_entity_cache(entity_cache: dict, canonical: dict, log=None) -> int:
+    """entity_cache `{English: {korean,...}}` 의 English key 가 통용 dict 에 있으면
+    korean 을 강제 교정 (user 우선, 대소문자 무시). dict 미수록 key 는 불변."""
+    if not entity_cache or not canonical:
+        return 0
+    lower = _canonical_effective(canonical)
+    n = 0
+    for eng, meta in entity_cache.items():
+        if eng == "__speakers__" or not isinstance(meta, dict):
+            continue
+        canon = lower.get(eng.lower())
+        if canon and meta.get("korean") != canon:
+            meta["korean"] = canon
+            n += 1
+    if log and n:
+        log(f"   🔧 통용 표기 교정 (entity {n}건)")
+    return n
+
+
+def _apply_canonical_to_speaker_cache(speaker_cache: dict, canonical: dict, log=None) -> int:
+    """speaker_cache `{label: {english, korean}}` 의 english 가 통용 dict 에 있으면
+    korean 을 강제 교정 (user 우선). 화자 라벨이 본문 prefix 를 지배하므로 함께 교정."""
+    if not speaker_cache or not canonical:
+        return 0
+    lower = _canonical_effective(canonical)
+    n = 0
+    for _label, meta in speaker_cache.items():
+        if not isinstance(meta, dict):
+            continue
+        eng = (meta.get("english") or "").strip()
+        canon = lower.get(eng.lower())
+        if canon and meta.get("korean") != canon:
+            meta["korean"] = canon
+            n += 1
+    if log and n:
+        log(f"   🔧 통용 표기 교정 (speaker {n}건)")
+    return n
+
+
+def refresh_canonical_in_markdown(md: str, canonical: dict) -> tuple:
+    """완성된 노트(md)에서 auto 표기를 user 표기로 텍스트 치환 (A-2 ③ 리프레시).
+
+    - **auto·user 둘 다 있고 서로 다른 항목만** 대상 (옛 auto 표기를 user 로 교체).
+      user 만/auto 만인 항목은 바꿀 옛 표기가 없어 skip.
+    - 일반형(`팰머 러커이`) + 태그 언더스코어형(`팰머_러커이`) 둘 다 치환.
+    - **단일 패스 정규식**(긴 패턴 우선)으로 치환 — 삽입된 user 텍스트를 재검색하지 않아
+      연쇄 치환이 일어나지 않는다. auto 가 한국어라 영어 원문 섹션은 자동 무영향.
+
+    Returns: (new_md, 바뀐 항목 수).
+    """
+    if not md or not canonical:
+        return md, 0
+    repl_map: dict = {}
+    matched_autos: set = set()
+    for v in canonical.values():
+        if not isinstance(v, dict):
+            continue
+        auto = (v.get("auto") or "").strip()
+        user = (v.get("user") or "").strip()
+        if not (auto and user and auto != user):
+            continue
+        # 일반형
+        if auto in md:
+            repl_map[auto] = user
+            matched_autos.add(auto)
+        # 태그 언더스코어형
+        auto_tag, user_tag = auto.replace(" ", "_"), user.replace(" ", "_")
+        if auto_tag != auto and auto_tag in md:
+            repl_map[auto_tag] = user_tag
+            matched_autos.add(auto)
+    if not repl_map:
+        return md, 0
+    # 긴 검색어 우선 (substring 항목이 더 긴 항목 안에서 잘못 잡히는 것 방지).
+    keys = sorted(repl_map, key=len, reverse=True)
+    pattern = re.compile("|".join(re.escape(k) for k in keys))
+    new_md = pattern.sub(lambda m: repl_map[m.group(0)], md)
+    return new_md, len(matched_autos)
+
+
 def translate_transcript(
     transcript: Transcript,
     config: Optional[LLMConfig] = None,
     progress: Optional[ProgressFn] = None,
     video_context: Optional[dict] = None,
     stop_event=None,  # threading.Event — chunk 사이 polling
+    search_fn: Optional[Callable] = None,  # 검색 그라운딩 의존성 주입 (인명·회사명 교정)
 ) -> str:
     """
     Transcript → 한국어로 번역된 스크립트 (문자열).
@@ -1589,6 +2150,18 @@ def translate_transcript(
             if speaker_cache:
                 log(f"   🎤 speaker cache bootstrap — {len(speaker_cache)}명 식별")
 
+    # A 보완 (5/26) — 통용 표기 결정론적 교정. bootstrap(디스크 캐시 hit 포함) 직후·
+    #   chunk loop 전에 적용 → cache_block prepend + 화자 라벨이 교정된 표기로. 저장(아래)
+    #   은 이 뒤라 디스크 캐시도 self-heal (옛 "팰머 러커이" → "팔머 럭키").
+    canonical_names = _load_canonical_names() if config.enable_phase2 else {}
+    auto_acc: dict = {}  # English → 교정 전 raw 표기 (작업 끝에 auto 로 누적 저장)
+    if config.enable_phase2:
+        # 자동 채움 — 교정 전 raw 표기를 먼저 캡처 (user 가 auto 로 덮이지 않게).
+        _record_auto_spellings(auto_acc, entity_cache, "entity")
+        _record_auto_spellings(auto_acc, speaker_cache, "speaker")
+        _apply_canonical_to_entity_cache(entity_cache, canonical_names, log)
+        _apply_canonical_to_speaker_cache(speaker_cache, canonical_names, log)
+
     # 5/23 — 영상 단위 첫 등장 catch (화자 라벨 영문 병기 first-occurrence, 2-pass 전용).
     seen_speakers: set = set()
 
@@ -1625,13 +2198,40 @@ def translate_transcript(
                 added = {k: v for k, v in new_entities.items() if k not in entity_cache}
                 if added:
                     entity_cache.update(added)
+                    # 자동 채움 — chunk 신규 entity 의 raw 표기 캡처 (교정 전).
+                    _record_auto_spellings(auto_acc, added, "entity")
+                    # A 보완 — chunk 신규 entity 도 통용 표기 교정.
+                    _apply_canonical_to_entity_cache(added, canonical_names, log)
                     log(f"   📚 entity cache 갱신: +{len(added)}건 (누적 {len(entity_cache)}건)")
 
     log("✅ 번역 완료")
 
+    # 검색 그라운딩 (GURUNOTE_SEARCH_GROUNDING, 기본 off) — 인명·회사명 STT 오인식을
+    # 주입받은 search_fn 으로 교정. entity_cache 의 english key 를 정답으로 교체(원래 키는
+    # original_english 로 보존) + source="search" 마킹(재검색 방지). 디스크 저장(아래) 전에
+    # 실행해 교정된 cache 가 영속. 반환 {원래 english: 교정 english} 는 본문/원문/frontmatter
+    # 전파에 쓴다. 토글 off·search_fn 부재·예외는 교정 없이 graceful skip.
+    stt_corrections: dict = {}
+    if (config.enable_phase2 and search_fn is not None
+            and os.environ.get("GURUNOTE_SEARCH_GROUNDING", "0") == "1"):
+        # 캐시-히트 재처리 — 이미 교정된 entity(source="search")는 _verify 가 건너뛰므로,
+        # original_english 로 교정 쌍을 먼저 복원해야 본문 병기·소스 주입이 일관 유지된다.
+        for _eng, _meta in entity_cache.items():
+            if isinstance(_meta, dict) and _meta.get("original_english"):
+                stt_corrections[_meta["original_english"]] = _eng
+        # 신규(아직 검색 안 한) entity 교정을 누적.
+        stt_corrections.update(_verify_entities_with_search(entity_cache, search_fn, log))
+
+    # A-2 ① — 자동 채움: 작업 중 본 고유명사의 raw 표기를 통용 dict 의 auto 로 누적 저장.
+    #   user 는 불변. ②편집 UI 가 auto 를 보여주고 사용자가 user 로 수정 → 다음 작업부터 적용.
+    if config.enable_phase2 and auto_acc:
+        _persist_auto_spellings(auto_acc)
+
     # B06 — 영상 처리 완료 시 entity_cache 디스크 저장 (spec §4.4).
     # cache key 는 video_id 우선, 부재 시 video_title hash fallback.
-    if config.enable_phase2 and entity_cache:
+    # speaker_cache 만 있고 entity 0건인 영상도 저장 — 안 그러면 영어 원문 화자 실명이
+    # 디스크에 안 남아 load_speaker_names 가 {} → 라벨 fallback (번역본 실명/원문 라벨 불일치).
+    if config.enable_phase2 and (entity_cache or speaker_cache):
         video_title_for_cache = (video_context or {}).get("title", "") if video_context else ""
         cache_key = (
             (video_context or {}).get("id")
@@ -1655,6 +2255,9 @@ def translate_transcript(
     # 정규화 영역 부재 (chunk join 만으로 충분).
     normalized_parts = translated_parts
     result = "\n\n".join(normalized_parts).strip()
+    # C (5/28) — 본문 라인 레벨 연속 반복 축약 (더듬거림 구간을 2-pass 가 같은 문장으로
+    #   채우는 회귀 차단). 1-pass·2-pass 공통 조립 직후, 다른 후처리 전.
+    result = _collapse_repeated_lines(result, log)
     # Phase 3 — 한자/일본어 잔재 후처리 (Sub-path A → B → C).
     # Sub-path A 사전 lookup → 미적중 시 Sub-path B LLM 재매핑 → 그래도 잔재 시
     # Sub-path C 영문 원문 fallback. 본 단계로 한자/일본어 0건 보장.
@@ -1663,9 +2266,23 @@ def translate_transcript(
     # entity_cache 의 canonical 표기 + 외래어 표기법 short version 으로 chunk drift 통일.
     if config.enable_phase2:
         result = _canonicalize_entity_names(result, entity_cache, config, log)
-    # Q2 영역 — 영상 단위 영문 병기 첫 등장 catch (Layer 13 정합).
-    # chunk 단위 영역 부재 — chunk 경계 memory 부재로 매 chunk 첫 등장 catch
-    # 영역 패턴 영역 dedup.
+    # 검색 그라운딩 — 한국어 본문 병기의 교정 영문 전파 (Wurst)→(Warsh).
+    #   result 텍스트 치환 (병기는 괄호 안 영문). 영어 원문 섹션·frontmatter 는 exporter 가
+    #   디스크 cache(original_english)에서 따로 전파 (load_stt_corrections).
+    for _orig, _corr in stt_corrections.items():
+        result = result.replace(f"({_orig})", f"({_corr})")
+    # B (5/26) — 영문 병기 철자를 소스(transcript 전문 + 제목)로 결정론적 검증.
+    #   LLM 이 영문 원어를 자유 생성하다 오염(Anduril→Danduril)시키는 것 차단.
+    _src_title = (video_context or {}).get("title", "") if video_context else ""
+    source_corpus = " ".join(s.text for s in transcript.segments)
+    if _src_title:
+        source_corpus = f"{source_corpus} {_src_title}"
+    # 검색 그라운딩 — 교정 영문을 소스 풀에 주입해 _correct_english_annotations 가 교정
+    #   병기((Warsh))를 소스 부재로 DROP 하지 않게 (소스는 raw STT=Wurst 라 누락 위험).
+    if stt_corrections:
+        source_corpus = f"{source_corpus} " + " ".join(stt_corrections.values())
+    result = _correct_english_annotations(result, source_corpus, log)
+    # 영상 단위 영문 병기 첫 등장만 남기고 반복 병기 dedup (Layer 13 정합).
     return _strip_repeated_annotations(result)
 
 
@@ -1744,21 +2361,31 @@ def summarize_translation(
         )
         log("📝 부분 요약 통합 중…")
         _check_stop()
-        return _call_llm(
+        merged = _call_llm(
             config,
             system=system,
             user=merged_user,
             max_tokens=config.summary_max_tokens or SUMMARY_MAX_TOKENS,
         ).strip()
+        # Phase 3 보완 — 요약 섹션 한자/일본어 후처리 (segment-less A+B).
+        merged = post_process_cjk_text(merged, config, log)
+        # 요약 충실도 (5/28) — 인명 병기의 영문 key 로 통용 dict 조회 → 한국어 강제 교정.
+        #   요약 LLM 이 본문 표기('스탠')를 자율 변형('스턴')해도 결정론적으로 통일.
+        return _correct_korean_in_annotations(merged, _load_canonical_names())
 
     log("📝 GuruNote 요약본 생성 중…")
     _check_stop()
-    return _call_llm(
+    summary = _call_llm(
         config,
         system=system,
         user=translated_text,
         max_tokens=config.summary_max_tokens or SUMMARY_MAX_TOKENS,
     ).strip()
+    # Phase 3 보완 — 요약 섹션 한자/일본어 후처리 (segment-less A+B).
+    summary = post_process_cjk_text(summary, config, log)
+    # 요약 충실도 (5/28) — 인명 병기의 영문 key 로 통용 dict 조회 → 한국어 강제 교정.
+    #   요약 LLM 이 본문 표기('스탠')를 자율 변형('스턴')해도 결정론적으로 통일.
+    return _correct_korean_in_annotations(summary, _load_canonical_names())
 
 
 # =============================================================================
@@ -1770,8 +2397,16 @@ METADATA_SYSTEM_PROMPT = """당신은 IT/AI 컨텐츠 큐레이터입니다.
 
 추출 항목:
 1. organized_title: 사람이 보기 쉬운 한국어 제목 (60자 이내)
-   - ★ 우선순위: 원본 영상 제목이 충분히 명확하면 그대로 사용 또는 단순 한국어 번역.
-   - 영어/너무 김/광고문구 포함되어 있으면 핵심 주제로 새로 작성.
+   - ★★ 원본 영상 제목이 주어지면 (영상 메타의 '제목' 이 비어있지 않으면) → **원문의 구조·
+     형식·문답·말장난을 한국어로 그대로 살려 직역**한다. 접두사("Bonus:")·부제·게임/코너 형식·
+     문답 구조를 **보존**하고, **내용을 요약하거나 형식을 뭉개지 말 것.** 자연스러운 한국어
+     어순은 허용하되 원문의 구조와 의미를 잃지 마라. (사용자가 원본 맥락을 알고 있음.)
+     예) "Bonus: I Say Economy, You Say…with Stan Druckenmiller" (단어 연상 게임 형식)
+        ✓ "보너스: 내가 '경제'라고 하면 당신은? — 스탠 드러켄밀러(Stan Druckenmiller)"
+          (게임 문답 구조 보존)
+        ✗ "보너스: 경제 단어 연상 — 스탠 드러켄밀러" (형식 뭉갬 — 게임 구조 손실)
+        ✗ "스탠 드러켄밀러: 금리·관세·달러 전망" (내용 요약 — 절대 금지)
+   - 원본 제목이 **비어있을 때만** (메타에 제목 부재) → 인물·주제 중심으로 새로 작성.
    - ★ title 등장 인물 룰 (Layer 15 fix-up #1 — hallucination 차단):
      * 영상의 실제 화자 + 영상의 핵심 주제만 포함.
      * 본문에서 단순 인용된 인물 (키노트 발표자, 언급된 학자, 화자가 인용한
@@ -1846,9 +2481,22 @@ def extract_metadata(
         f"\n원본 YouTube 태그: {', '.join(youtube_tags[:15])}" if youtube_tags else ""
     )
 
+    # 제목 지시 분기 — 원본 제목 유무에 따라 직역/요약 신호 명시.
+    if youtube_title.strip():
+        title_directive = (
+            f"- 제목: {youtube_title}\n"
+            f"  → organized_title: **위 원본 제목을 구조 그대로 직역**하라 (접두사·게임/문답 형식·"
+            f"말장난 보존, 형식 뭉개기·내용 요약 금지). "
+            f"인명은 첫 등장 영문 병기 `한국어(English)` 필수.\n"
+        )
+    else:
+        title_directive = (
+            "- 제목: (원본 제목 부재)\n"
+            "  → organized_title: 인물·주제 중심으로 새로 작성하라.\n"
+        )
     user = (
         f"### 영상 메타\n"
-        f"- 제목: {youtube_title}\n"
+        f"{title_directive}"
         f"- 업로더: {uploader}{youtube_tag_block}\n\n"
         f"### 한국어 번역 발췌\n{excerpt}\n"
     )
@@ -1864,7 +2512,27 @@ def extract_metadata(
             user=user,
             max_tokens=metadata_max_tokens,
         )
-        return _parse_metadata_json(raw)
+        meta = _parse_metadata_json(raw)
+        # B (5/26) — organized_title 영문 병기도 소스(원본 제목 + 번역 본문)로 검증.
+        #   summarize/extract 는 entity_cache 미참조 → 제목 오타(Danduril)는 별도 차단.
+        if meta.get("organized_title"):
+            title_corpus = f"{youtube_title} {translated_text}"
+            meta["organized_title"] = _correct_english_annotations(
+                meta["organized_title"], title_corpus
+            )
+            # 제목 품질 — 인명 병기의 영문 key 로 통용 dict 조회 → 한국어 강제 교정
+            #   (LLM 오음차 "스타니슬라프 드루킨밀러(Stan Druckenmiller)" → "스탠 드러켄밀러").
+            meta["organized_title"] = _correct_korean_in_annotations(
+                meta["organized_title"], _load_canonical_names()
+            )
+        # Phase 3 보완 — 제목/분야/태그 한자·일본어 후처리 (segment-less A+B).
+        if meta.get("organized_title"):
+            meta["organized_title"] = post_process_cjk_text(meta["organized_title"], config, log)
+        if meta.get("field"):
+            meta["field"] = post_process_cjk_text(meta["field"], config, log)
+        if meta.get("tags"):
+            meta["tags"] = [post_process_cjk_text(t, config, log) for t in meta["tags"]]
+        return meta
     except Exception as exc:  # noqa: BLE001
         log(f"  메타데이터 추출 실패 (무시하고 계속): {exc}")
         return {}
@@ -2094,7 +2762,7 @@ def _build_freeform_translation_prompt(inputs: list, context: str) -> str:
 
 다음 {len(inputs)}개 segment 본문을 한국어로 번역하라:
 
-1. 형식 제약 부재 — 자유롭게 자연스러운 한국어로 번역.
+1. 형식 제약 부재. 원문의 모든 절·정보를 빠짐없이 충실하게 한국어로 옮기되, 한국어로 자연스럽게 재구성. 환각·누락·일반 영어 leak 금지.
 2. **각 segment 를 빈 줄 (`\\n\\n`) 로 구분하여 정확히 {len(inputs)}개 출력**.
 3. **화자 라벨 출력 절대 부재** — 입력에 화자 prefix 부재, 출력도 화자 부재.
    본문 한국어 번역만 출력 (예: "안녕하세요. 오늘은…" 형식, "이름: 본문" 형식 절대 부재).
@@ -2434,6 +3102,53 @@ def _strip_input_speaker_prefix(text: str) -> str:
         prefix strip 후 text. 매치 부재 시 원본 그대로.
     """
     return _SPEAKER_PREFIX_RE.sub("", text)
+
+
+# 본문 라인 레벨 연속 반복 축약 (C, 5/28) — 더듬거림 구간을 2-pass 2단계가 같은
+# 문장으로 채우는 회귀 차단. 같은 화자 + 같은 텍스트가 연속 N회+ 이고 텍스트가 충분히
+# 길면 첫 라인만 남긴다. 짧은 발화(네./맞습니다.)·다른 화자 동일 발화·marker 는 보존.
+_DEDUP_LINE_RE = re.compile(r"^(\[\d{1,2}:\d{2}(?::\d{2})?\])\s+([^:]+):\s*(.*)$", re.DOTALL)
+_DEDUP_MIN_LEN = 10   # 텍스트 길이 < 이 값이면 횟수 무관 보존 (짧은 동의/감사/단어연상)
+_DEDUP_MIN_RUN = 3    # 연속 동일 라인이 이 횟수 이상이면 축약
+_DEDUP_SKIP_PREFIXES = ("[번역 누락]", "[⚠", "(음성 인식 오류")
+
+
+def _collapse_repeated_lines(text: str, log: Optional[ProgressFn] = None) -> str:
+    """같은 화자 + 같은 텍스트가 `_DEDUP_MIN_RUN` 회 이상 연속이고 텍스트가
+    `_DEDUP_MIN_LEN` 자 이상이면 **첫 라인만 남기고 제거** (timestamp 는 첫 라인 것).
+
+    1-pass·2-pass 공통 본문 조립 직후 적용. 짧은 발화(네./맞습니다.)·다른 화자 동일
+    발화·marker([번역 누락]/[⚠ timeout]/음성 인식 오류) 는 보존 (실데이터 임계 근거).
+    """
+    parts = text.split("\n\n")
+    out: List[str] = []
+    collapsed = 0
+    i, n = 0, len(parts)
+    while i < n:
+        m = _DEDUP_LINE_RE.match(parts[i].strip())
+        if not m:
+            out.append(parts[i])
+            i += 1
+            continue
+        sp, tx = m.group(2).strip(), m.group(3).strip()
+        # 연속 동일 (화자+텍스트) 그룹 길이 측정
+        j = i + 1
+        while j < n:
+            mj = _DEDUP_LINE_RE.match(parts[j].strip())
+            if not mj or mj.group(2).strip() != sp or mj.group(3).strip() != tx:
+                break
+            j += 1
+        run = j - i
+        is_marker = any(tx.startswith(p) for p in _DEDUP_SKIP_PREFIXES)
+        if run >= _DEDUP_MIN_RUN and len(tx) >= _DEDUP_MIN_LEN and not is_marker:
+            out.append(parts[i])  # 첫 라인만 유지
+            collapsed += run - 1
+        else:
+            out.extend(parts[i:j])
+        i = j
+    if log and collapsed:
+        log(f"   🔧 연속 반복 라인 축약 — {collapsed}줄 제거 (더듬거림 회귀 차단)")
+    return "\n\n".join(out)
 
 
 def _post_process_two_pass_outputs(

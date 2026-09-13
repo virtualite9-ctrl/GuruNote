@@ -1,6 +1,6 @@
 # GuruNote 변경 기록 (저장소 CHANGELOG + 백엔드 Phase 연계)
 
-> 저장소 `CHANGELOG.md` (Keep a Changelog 형식)은 main 브랜치 v0.x 기준. 본 문서는 main(v0.x) + redesign/tailwind-v2 (Phase 2A/2B/백엔드 Phase 1~5) 통합. 백엔드 Phase는 main에 미머지 catch.
+> 저장소 `CHANGELOG.md` (Keep a Changelog 형식) 은 5/24 v1.0.0.0 entry 작성됨. 본 문서는 두 트리 (옛 main `4bcbee6` 트리 + redesign `af50c2e` 트리) 의 통합 view. 5/24 main 통합 완료 — 옛 main 은 `archive/main-pre-cli` 영구 보존.
 
 ## main 브랜치 v0.x (PRD ~ v0.8.0.6)
 
@@ -138,6 +138,60 @@
 - `4f2db79` docs: 옛 UI 작업 문서 legacy 정리 (37 rename)
 - `373d5db` docs: Phase 5 검증 산출물 보존
 - `5c3c240` docs: 18개 세션 사료화
+- `41745e6` docs: GuruNote 역사 기록 (통합 일지 + HISTORY/DECISIONS/DEBUGGING/CHANGELOG 첫 작성)
+
+### Phase 5 마무리 (5/24 저녁)
+
+- `6dc9934` **Phase 5 default on**: `GURUNOTE_SEGMENT_RESPLIT` + `GURUNOTE_TWO_PASS` 기본값 off → on. daily 검증 영상 2 개 통과 (xKK5ze3FukQ 96→49 segments, zNuOOMM20Tk 586→294 segments, timeout 0, CJK 0). 토글 off 안전망 유지. 신규 백로그 B07 (D 재평가) + B08 (화자 bootstrap 한계).
+
+### v1.0.0.0 선언 + main 통합 (5/24 저녁)
+
+- `2971939` **release: v1.0.0.0**:
+  - 버전 0.8.0.6 → 1.0.0.0 (7 곳 동시 갱신: `__init__.py`, `gui.py` 사이드바, `package_desktop.py` Inno Setup + pkgbuild, `SettingsScreen.jsx` fallback, `README.md`, `CHANGELOG.md`)
+  - CLAUDE.md 체크리스트 5-file → 6-file
+  - 신규 `run_webview.command` (React/PyWebView macOS 런처)
+  - README 약 60 % 재작성 — 진입점 `app_webview.py` 권장, React/Mac/MLX 위주
+  - 신규 백로그 B09 (PipelineWorker 분리, P3) + B10 (setup 스크립트 echo, P3)
+  - 1.0 근거 (하위 호환 깸): License MIT → Elastic, UI CustomTkinter/Streamlit → React/Material 3/PyWebView, 번역 1-pass → 2-pass DCCD + entity_cache + CJK + STT 재분할
+- (브랜치 작업, 5/24) **main 통합 — unrelated histories 처리**:
+  - 옛 main 트리 (root `4bcbee6`, HEAD `9b6c621` v0.8.0.6, 211 commit) 와 redesign 트리 (root `af50c2e`, HEAD `2971939` v1.0.0.0) 가 공통 조상 부재 사실 확인
+  - 옛 main 211 commit 전체를 `archive/main-pre-cli` 로 origin 영구 보존
+  - `git push origin main --force-with-lease` 로 redesign 트리를 main 으로 통일
+  - origin/main: `9b6c621` → `2971939`
+  - test 183 passed (main 상태)
+
+### daily 사용성·품질 v1.0.0.1~26 (5/25~29)
+
+> v1.0.0.0 이후 본인 daily 사용에서 발견한 항목을 REVISION 단위로 수정. 상세 흐름은 HISTORY §4, 결정은 DECISIONS ADR-014~022.
+
+- `add66d2` **v1.0.0.1**: 출처 링크 + 다운로드 wiring (B11)
+- `4615843` **v1.0.0.2**: RAG 의미 검색 React 재배선 (B12) — 별도 환경 작업으로 의존성 설치 + 28노트 인덱스 빌드
+- `8eaa538` **v1.0.0.3**: Obsidian 내보내기 + RAG wikilink (B13)
+- `ef4426d` **v1.0.0.4**: 라이브러리 삭제 ↔ vault 사본 동기화, `gurunote_job_id` 표식 (B14, ADR-014)
+- `8b2125e` **v1.0.0.5**: Obsidian 파일명 접두사 제거 (ADR-014)
+- `77dd6b0` **v1.0.0.6**: 인명 음차 통용 표기 우선 (A, ADR-015)
+- `8f836a0` **v1.0.0.7**: 영문 병기 철자 소스 검증 (B, ADR-015)
+- `d6a5d12` **v1.0.0.8**: 처리 옵션 토글 (2-pass / STT 재분할, ADR-016)
+- `83551bc` **v1.0.0.9**: Obsidian 작업 완료 후 자동 내보내기 토글 (B16-2)
+- `9d342b6` **v1.0.0.10**: 인명 통용 표기 결정론적 교정 (ADR-017)
+- `d106430` **v1.0.0.11**: 통용 dict auto/user 구조 + 자동 채움 (ADR-017)
+- `c8311ae` **v1.0.0.12**: 통용 표기 편집 UI (ADR-017)
+- `390d69b` (+`50d0140`) **v1.0.0.13**: 노트 표기 새로고침 (ADR-017)
+- `2692cd0` **v1.0.0.14**: 제목·요약 한자 혼입 차단 (ADR-018, B17)
+- `5ef0e2f` **v1.0.0.15**: 제목 원본 직역 우선 + 인명 dict 교정 (ADR-018, B18)
+- `01553af` **v1.0.0.16**: 제목 구조 직역 강화 (ADR-018, B18)
+- `89f68ec` **v1.0.0.17**: 노트 생성 버전 표시 (ADR-018, B19)
+- `c372c72` **v1.0.0.18**: 본문 충실 의역 전환 (ADR-018, B20)
+- `ab04856` **v1.0.0.19**: 본문 반복 라인 축약 (ADR-018, B21)
+- `9aad35e` **v1.0.0.20**: 요약 충실도 강화 (ADR-018, B22)
+- `9a12566`→`c3b58bb`(Revert)→`ca9ebf1`+`26b3f2a` **v1.0.0.21**: 뷰어 타임스탬프 토글 + 드래그 복사 (DEBUGGING §7)
+- `b6a8f5a` **v1.0.0.22**: 뷰어 생성일 KST 표시
+- `8f09c91` **v1.0.0.23**: 통용 표기 독립 화면 + 검색
+- `b70379f` **v1.0.0.24**: 통용 표기 추가 행 맨 위
+- `86ce877` **v1.0.0.25**: 자동 내보내기 중복 노트 스킵 (ADR-021)
+- `a05925c` **v1.0.0.26**: 토스트 타입별 좌측 보더 색 (ADR-022)
+
+> 저장소 루트 `CHANGELOG.md`(Keep a Changelog)는 별개 파일로 v1.0.0.26 까지 최신. 본 문서는 두 트리 통합 view.
 
 ---
 
@@ -145,21 +199,37 @@
 
 | 시기 | UI/frontend Phase | 백엔드 품질 Phase |
 |------|------------------|---------------|
-| 4/11~4/19 | v0.1.0 ~ v0.8.0.6 (Streamlit → CustomTkinter → 다수 PR) | — |
-| 4/19~4/22 | UI Phase 1-B (PyWebView MVP) | — |
-| 4/24~4/25 | Phase 2A (Tailwind, Commit 2 Revert) | — |
+| 4/11~4/19 | v0.1.0 ~ v0.8.0.6 (Streamlit → CustomTkinter → 다수 PR) — **옛 main 트리** | — |
+| 4/19~4/22 | UI Phase 1-B (PyWebView MVP) — feat/webview-ui, 폐기 | — |
+| 4/24~4/25 | Phase 2A (Tailwind, Commit 2 Revert) — **redesign 트리 시작 (별도 init)** | — |
 | 4/27~5/2 | Phase 2B (React 신축, 514 commit 절정) | — |
 | 4/30~5/2 | Phase 2B-3-backend Step 3b-1~3b-3 | — |
 | 5/9~5/11 | Phase 2B-3-backend Layer 1~15 (UI 정책 + LLM prompt) | — |
-| 5/12~5/15 | (gap, 정전 대비 catch) | — |
-| 5/16~5/24 | — | **Phase 1 → 4a-1 → 3 → 2(B01) → B02 → B06 → 2-pass DCCD → 화자 코드 → community-1 → 빈 복구 → Phase 5 재분할** |
+| 5/12~5/15 | (gap, 정전 대비) | — |
+| 5/16~5/24 오후 | — | **Phase 1 → 4a-1 → 3 → 2(B01) → B02 → B06 → 2-pass DCCD → 화자 코드 → community-1 → 빈 복구 → Phase 5 재분할** |
+| 5/24 저녁 | **v1.0.0.0 선언 + main 통합** (redesign 트리 → main, 옛 main → archive/main-pre-cli 보존) | Phase 5 default on (daily 검증 후) |
+| 5/25~29 | daily 사용성 — 출처/RAG/Obsidian, 인명 자동화, 뷰어 토글/KST, 토스트 시각 (v1.0.0.1~26) | 인명 품질·충실 의역·요약 충실도 (ADR-015·017·018), temperature 0.6 (ADR-019), 검색 그라운딩 채택 (ADR-020, 대기) |
 
 ## 상호 관계
 
 - **Layer = UI/frontend + LLM prompt** (출력 표기, 화자 라벨, 가독성, 한자 차단 등)
-- **Phase 1~5 = 번역 본체 (LLM 호출 path, chunk 분할, entity_cache, 후처리, STT 재분할)**
-- Layer 시리즈 (5/9~11) 후 일주일 catch (5/14 정전 대비 catch) → 5/16~ 백엔드 본체 catch 진입.
+- **Phase 1~5 = 번역 본체** (LLM 호출 path, chunk 분할, entity_cache, 후처리, STT 재분할)
+- Layer 시리즈 (5/9~11) 후 일주일 gap (5/14 정전 대비) → 5/16~ 백엔드 본체 진입.
+- v1.0.0.0 (5/24) = 두 흐름의 통합 + 옛 main 트리 (v0.x Streamlit/CustomTkinter) 의 archive 보존.
+
+## 브랜치 / 트리 구조 (5/24 통합 후)
+
+| 브랜치 | HEAD | root | commit 수 | 의미 |
+|---|---|---|---|---|
+| `origin/main` | `2971939` (v1.0.0.0) | `af50c2e` | 412 | redesign 트리 — 통일된 main |
+| `origin/redesign/tailwind-v2` | `2971939` | `af50c2e` | 412 | 작업 브랜치 (동일) |
+| `origin/archive/main-pre-cli` | `9b6c621` (v0.8.0.6) | `4bcbee6` | 211 | 옛 main 트리 — 영구 보존 |
+| `origin/archive/commit-2-aborted` | (4/25 작성) | (redesign 트리) | — | Phase 2A Commit 2 자산 보존 |
 
 ---
 
-**참고**: 저장소 `CHANGELOG.md`는 Keep a Changelog 형식 — main 브랜치 v0.x catch. 본 문서는 두 브랜치 통합 catch. v0.x 일부 (v0.4.0/0.6.0) 본인 기억 2차 사료.
+**참고**:
+- 저장소 `CHANGELOG.md` 는 Keep a Changelog 형식 — 5/24 `[1.0.0.0]` entry 작성됨 + 옛 v0.x history 잔존.
+- 본 문서는 두 트리 통합 view + 5/24 통합 사후 기록.
+- v0.x 일부 (v0.4.0/0.6.0) 본인 기억 2차 사료.
+- 두 트리가 별개 root 를 가진 정확한 원인 시점은 **기록 부재** — 본인 기억으로는 4/19 직후 환경 전환.

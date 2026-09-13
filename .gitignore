@@ -234,3 +234,5 @@ verify_results/**/segments.json
 verify_results/*_segments.json
 verify_results/**/resplit.json
 verify_results/*_resplit.json
+# CLAUDE.md 는 저장소에서 추적한다 (버전 정책·CHANGELOG 규칙의 출처).
+CLAUDE.legacy.md

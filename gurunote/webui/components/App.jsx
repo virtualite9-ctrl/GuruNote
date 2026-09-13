@@ -302,6 +302,32 @@ function App() {
       updateMainSession({ running: false, pct: 1.0, result: payload });
       // History refresh trigger — Sidebar / HistoryScreen / DashboardScreen 자동.
       setHistoryRefreshKey((k) => k + 1);
+
+      // B16-2: 자동 내보내기 토글(GURUNOTE_OBSIDIAN_AUTOEXPORT="1") on 이면 작업 완료
+      //   직후 Obsidian vault 로 내보낸다. best-effort — 작업 결과는 이미 저장됐으므로
+      //   내보내기 실패해도 완료 흐름은 정상. 토글 off(기본) 면 무동작.
+      const jid = payload.job_id;
+      if (jid) {
+        (async () => {
+          try {
+            const s = await window.pywebview?.api?.get_settings();
+            if (!(s?.ok && s.values?.GURUNOTE_OBSIDIAN_AUTOEXPORT === '1')) return;
+            const r = await window.pywebview.api.send_obsidian(jid, true);
+            if (r?.skipped) {
+              window.showToast?.('이미 내보낸 노트 — 건너뜀', 'info');
+            } else if (r?.ok) {
+              const rc = r.related_count || 0;
+              window.showToast?.(`Obsidian 자동 내보내기 완료${rc ? ` (연관 노트 ${rc}개)` : ''}`, 'success');
+            } else if (r?.code === 'NO_VAULT') {
+              window.showToast?.('자동 내보내기 — Obsidian Vault 미설정 (설정 → Obsidian)', 'error');
+            } else {
+              window.showToast?.(`자동 내보내기 실패: ${r?.error || '알 수 없는 오류'}`, 'error');
+            }
+          } catch (err) {
+            window.showToast?.(`자동 내보내기 오류: ${err.message || err}`, 'error');
+          }
+        })();
+      }
     };
 
     window.bus.addEventListener('progress', onProgress);

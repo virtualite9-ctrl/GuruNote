@@ -7,58 +7,404 @@
 
 ## [Unreleased]
 
-## [1.0.0.2] - 2026-09-13
+
+## [1.0.0.28] - 2026-09-13
+
+`redesign/tailwind-v2` 통합 릴리스. 5/24~5/30 에 브랜치에 쌓인 41 커밋(v1.0.0.1~27)과,
+그 사이 main 에 들어간 CI·패키징·구조 작업을 하나의 버전으로 합쳤다.
+
+### Merged
+
+- 브랜치의 v1.0.0.1~v1.0.0.27 항목은 아래에 그대로 보존한다. 통용 표기 dict(auto/user,
+  편집 UI, 독립 화면, 새로고침), Obsidian 내보내기 통합(자동 토글, 삭제 동기화, wikilink,
+  중복 건너뛰기), 번역·요약·제목 충실도, RAG React 재배선, 뷰어 UX, 영어 원문 화자 실명.
+
+### Added
+
+- 단위 테스트 CI (`.github/workflows/tests.yml`) — Python 3.10 / 3.11 / 3.12 에서
+  `pytest -m "not slow"` 실행.
+- `openai`, `yt-dlp` 를 `dev` optional-dependency 로 선언.
+- `tests/test_pipeline_worker_extraction.py` — 워커와 React 어댑터가 UI 툴킷을 적재하지
+  않는지 검사.
 
 ### Changed
 
 - `PipelineWorker` 를 `gui.py` 에서 `gurunote/pipeline_worker.py` 로 분리 (backlog B09).
-  React/PyWebView 진입점이 `gurunote/webui/session.py` 에서 `from gui import PipelineWorker`
-  로 CustomTkinter 파일을 끌어오고 있었다. `gui.py` 는 모듈 레벨에서 customtkinter 를
-  import 하고 stdout/stderr 을 로그 파일로 돌리는 부수효과를 실행하므로, React 경로가
-  UI 툴킷과 그 부수효과를 떠안는 구조였다. 클래스 본문은 248행 그대로 옮겼다 (바이트 동일).
-- `gurunote/webui/session.py` 의 워커 import 를 모듈 레벨로 올렸다. 미루던 이유(`gui` 의
-  부수효과)가 없어졌다. 낡은 주석과 docstring 의 `gui.PipelineWorker` 표기도 함께 고쳤다.
-- `gui.py` 는 하위 호환을 위해 `PipelineWorker` 를 계속 re-export 한다. 이 분리로
-  불필요해진 import 11개 (`tempfile`, `transcribe`, `install_tee`, `autosave_result` 등) 를
-  정리했다. 4348행 → 4098행.
-
-### Added
-
-- `tests/test_pipeline_worker_extraction.py` — 워커와 React 어댑터가 UI 툴킷을 적재하지
-  않는지 별도 인터프리터에서 확인하고, `gui.py` 의 re-export 유지와 중복 정의 부재를 검사한다.
-- `yt-dlp` 를 `dev` optional-dependency 로 선언. `gurunote.audio` 가 모듈 레벨에서
-  import 하고 `gurunote.pipeline_worker` 가 그 모듈을 끌어오므로 import 검사에 필요하다.
-
-### Notes
-
-- 파이프라인 동작 변경 없음. 클래스 본문이 이전 버전과 바이트 동일하다.
-- `gui.py` 는 customtkinter 를 요구해서 이 테스트 환경에서 import 할 수 없다. 해당 검사는
-  소스(AST) 수준으로 수행한다.
-
-## [1.0.0.1] - 2026-09-13
-
-### Added
-
-- 단위 테스트 CI (`.github/workflows/tests.yml`). push / pull request / 수동 실행에서
-  `pytest -m "not slow"` 를 Python 3.10 / 3.11 / 3.12 로 실행한다. `tests/` 가 건드리는
-  모듈은 표준 라이브러리와 pyyaml, openai 만 import 하므로 STT 엔진이나 CUDA/Metal
-  toolchain 없이 ubuntu 러너에서 전부 돌아간다 (약 180건, 2초).
-- `openai` 를 `dev` optional-dependency 로 선언. `tests/test_xgrammar_healthcheck.py` 가
-  `patch("openai.OpenAI")` 로 클라이언트를 모킹하므로 patch 대상 해석에 모듈 import 가
-  필요하다. 그동안 선언 없이 우연히 설치돼 있던 환경에서만 통과하던 상태였다.
+  이 통합에서 브랜치가 워커에 추가한 화자 실명 조회(`load_speaker_names`) 4 행도 새 모듈로
+  함께 옮겼다.
+- `gurunote/webui/session.py` 의 워커 import 를 모듈 레벨로 올렸다.
 
 ### Fixed
 
-- `pip install -e .` 이 "Multiple top-level packages discovered in a flat-layout:
-  ['gurunote', 'verify_results']" 로 실패하던 문제. `verify_results/` 는 검증 보고서
-  디렉토리인데 flat-layout 자동 탐색이 패키지 후보로 집계했다.
-  `[tool.setuptools.packages.find] include = ["gurunote*"]` 로 배포 대상을 한정했다.
-  이 때문에 선언된 `dev` extra 를 쓸 수 없었고 CI 도 붙일 수 없었다.
+- `pip install -e .` 이 "Multiple top-level packages discovered in a flat-layout"
+  으로 실패하던 문제. `[tool.setuptools.packages.find] include = ["gurunote*"]` 로
+  배포 대상을 한정했다.
 
 ### Notes
 
-- 기능·파이프라인 동작 변경 없음. STT / 번역 / 내보내기 경로는 손대지 않았다.
-- `slow` marker (실제 LLM 호출) 는 CI 에서 제외한다. 본인 manual 실행 대상으로 남긴다.
+- **버전 번호 충돌 정리.** main 에 9/13 자로 `1.0.0.1` 과 `1.0.0.2` 를 붙였는데, 같은 번호가
+  이미 브랜치에서 다른 내용으로 쓰이고 있었다. 브랜치 쪽 번호 체계가 먼저이므로 그쪽을
+  정본으로 남기고, main 에 있던 두 항목의 내용은 이 `1.0.0.28` 안으로 옮겼다. 태그를
+  붙이지 않은 상태였으므로 공개된 릴리스가 바뀐 것은 없다.
+- `CLAUDE.md` 는 저장소에서 계속 추적한다. 브랜치가 `.gitignore` 에 넣어 추적 해제했으나,
+  버전 정책과 CHANGELOG 규칙의 출처라 통합하면서 되돌렸다.
+
+## [1.0.0.27] - 2026-05-30
+
+### Added
+- **영어 원문 스크립트 화자 표기를 라벨에서 실제 이름으로** — 한국어 번역본은 번역 중
+  화자 실명이 본문에 들어가는데 영어 원문 섹션은 `Speaker A/B` 라벨뿐이라 비대칭이었다.
+  같은 화자 매핑(`speaker_cache`)을 영어 원문 섹션에도 적용해 라벨을 English 실명으로
+  표기. 매핑 없는 라벨(화자분리 미식별·캐시 miss)은 기존 `Speaker X` 로 fallback. 디스크
+  entity cache 의 `speakers` 필드를 재사용(`load_speaker_names`), 저장 게이트를 entity 0건
+  영상도 화자 매핑이 남도록 보완(`entity_cache or speaker_cache`). 한국어 번역본·STT·화자
+  식별 로직 무변, 표시 + 전달 경로만.
+
+## [1.0.0.26] - 2026-05-29
+
+### Added
+- **토스트 알림 타입별 좌측 보더 색 구분** — 성공(초록)·정보(파랑)·경고(주황)·실패(빨강)를
+  좌측 3px 보더 색으로 구분(기존 `--gn-*` 토큰 재사용, info 는 primary 차용). 배경은 불투명
+  흰색을 그대로 유지해 Phase 2B-6d 의 가독성 결정(반투명 tint 제거)을 존중 — tint 배경은
+  재도입하지 않음. 기존엔 타입별 시각 차이가 없어 성공·건너뜀·실패를 텍스트로만 구분해야
+  했음. `main.css` 한 파일, 백엔드 무변.
+
+## [1.0.0.25] - 2026-05-29
+
+### Changed
+- **자동 Obsidian 내보내기 중복 건너뛰기** — 자동 내보내기 토글
+  (`GURUNOTE_OBSIDIAN_AUTOEXPORT="1"`) 이 켜진 상태에서 같은 영상을 다시 처리하면 vault 에
+  같은 노트 사본이 타임스탬프 접미사로 계속 쌓이던 문제. 자동 호출에 한해 같은
+  `gurunote_job_id` 표식 노트가 vault 에 이미 있으면(`obsidian.find_vault_copies` 재사용,
+  읽기 전용) 내보내기를 건너뛰고 "이미 내보낸 노트 — 건너뜀" 토스트로 안내. 수동 "Obsidian"
+  버튼은 종전대로 항상 새로 저장(건너뛰지 않음). `bridge.send_obsidian` 에 `skip_if_exists`
+  인자 추가(기본 꺼짐, 자동 호출만 켬), `App.jsx` 자동 호출만 플래그 전달.
+  `save_to_vault`·`obsidian.py`·`semantic.py` 는 호출만 — 변경 없음.
+
+## [1.0.0.24] - 2026-05-29
+
+### Changed
+- **통용 표기 "추가" 행을 목록 맨 위로** — 통용 표기 화면에서 "추가"를 누르면 새 빈 행이 목록
+  끝에 붙어 한참 스크롤해야 보이던 문제. 새 빈 행을 맨 앞에 넣어 추가 직후 스크롤 없이 바로
+  입력하게 함(검색어도 함께 해제 — 빈 행이 필터에 안 걸려 안 보이는 문제 방지). 렌더는 rows
+  배열 순서 그대로라 맨 앞 추가가 즉시 반영되고, 알파벳 정렬은 저장 시 다시 적용됨. 검색 중
+  수정·삭제의 원본 인덱스 보존은 그대로 유지. `SettingsScreen.jsx` 한 파일, 백엔드 무변.
+
+## [1.0.0.23] - 2026-05-29
+
+### Changed
+- **통용 표기 독립 화면 이동 + 검색** — 통용 표기 편집(`SettingsCanonicalNames`)을 설정 "고급"
+  인라인에서 떼어 좌측 설정 네비의 독립 항목("통용 표기", Notion 다음·고급 앞)으로 이동.
+  auto 자동 채움으로 항목이 늘어 고급 화면을 뒤덮던 문제 해소. 우측 전체 화면 + 섹션 헤더.
+  - **검색 추가** — 영문·auto·user 셋 다 대소문자 무시 부분 일치 필터. 검색 시에도 원본 인덱스를
+    보존해 수정·삭제가 맞는 행에만 적용(필터된 목록 인덱스로 다른 행을 망가뜨리지 않음).
+    빈 행 추가 시 검색어 자동 해제.
+  - 고급에는 처리 옵션·다른 LLM provider 키·WhisperX 등 본래 항목만 남김.
+  - `SettingsScreen.jsx` 한 파일. bridge(`get/save_canonical_names`)·백엔드 무변.
+
+## [1.0.0.22] - 2026-05-29
+
+### Fixed
+- **뷰어 "생성일" KST 표시** — 노트 상세 패널·삭제 확인 대화상자의 "생성일"이 저장 원본인
+  ISO UTC 문자열(`2026-05-28T15:11:40.942242+00:00`)로 그대로 노출되던 문제. 표시 단계에서
+  `Asia/Seoul` 고정으로 변환해 `2026-05-29 00:11` (`YYYY-MM-DD HH:mm`, 업로드일과 같은 결)로
+  표시. 저장 필드(`created_at`, ISO)는 불변 — 정렬(`localeCompare`/`Date.parse`)이 ISO 에
+  의존하므로 표시만 변환. 파싱 실패·빈 값이면 원본 그대로 반환. `HistoryScreen.jsx` 한 파일.
+
+## [1.0.0.21] - 2026-05-28
+
+### Added
+- **뷰어 타임스탬프 표시 토글** — 노트 뷰어(`ResultPanel`)의 한국어·영어 원문 탭에 "타임스탬프"
+  인라인 토글 추가. 끄면 전체 스크립트 라인의 `[MM:SS]` 가 화면에서만 사라지고 화자명은 유지.
+  보기 전용 클라이언트 상태(기본 켜짐, 영속화 부재) — 원본 `result.md`·job 데이터 불변,
+  백엔드/exporter/환경변수 미경유. 요약 탭(타임라인 타임스탬프)은 무변. 라이브·히스토리 상세·
+  편집기 미리보기 세 곳 공통 적용. ※ 9a12566(exporter 판) revert 후 뷰어 표시 방식으로 재구현.
+
+### Fixed
+- **뷰어 본문 드래그 선택·복사 불가** — 노트 뷰어의 한국어·영어 원문 탭(`.result-transcript`)과
+  요약 탭(`.result-rendered`) 본문을 마우스로 드래그 선택해 복사할 수 없던 문제. 이 webview
+  환경은 콘텐츠가 기본적으로 선택되지 않아 `user-select: text` 명시가 필요한데, Log 탭
+  (`.log-pane`)에만 있고 본문·요약 셀렉터엔 빠져 있었음. 두 셀렉터에 `.log-pane` 과 동일하게
+  `user-select: text; -webkit-user-select: text; cursor: text;` 추가 (`main.css` 한 파일).
+
+## [1.0.0.20] - 2026-05-28
+
+### Added
+- **요약 섹션 충실도 강화** — 요약(`SUMMARY_SYSTEM_PROMPT`)이 본문(`translate_transcript`)과
+  별도 LLM 경로라 v1.0.0.18 충실도 강화(환각·영어 leak 금지 룰)가 미적용이던 문제. 요약 LLM 이
+  본문(이미 dict 교정된 한국어)을 압축하며 자율 변형·날조하던 실측 사례를 차단.
+  - **프롬프트 조항 추가** (확률적):
+    - 환각 금지 — 입력 번역본에 실제로 있는 내용·인물만. 입력에 없는 인물(실측: 본문에 없는
+      'Janet Yellen', 'Jerome Powell')을 요약에 등장시키지 않음.
+    - 영어 단어 미번역 금지 — 일반 영단어 한국어화 (실측: 'formidable(강력한) 존재감' →
+      '강력한 존재감'). 병기/약어/모델·제품명/회사명은 예외.
+    - 인명 표기 일관 — 입력 번역본 표기를 그대로 (실측: 본문 '스탠 드러켄밀러' 인데 요약이
+      '스턴 드러켄밀러' 로 재음차). 첫 등장 영문 병기는 유지.
+  - **dict 인명 후처리** (결정론): `summarize_translation` 출력에 `_correct_korean_in_annotations`
+    적용 — `한국어(English)` 병기의 영문 key 로 통용 dict 조회 → 한국어 강제 교정(스턴→스탠).
+    제목(`extract_metadata`)과 같은 helper 재사용. 영문 병기 있는 인명에만 적용.
+  - 본문 `translate_transcript`/`TRANSLATION_SYSTEM_PROMPT`·제목 `extract_metadata`·
+    `_SHARED_LANG_RULES`·`post_process_cjk_text` 전부 무변 (요약 경로만 변경).
+  - `tests/test_summary_fidelity.py` 3건.
+
+## [1.0.0.19] - 2026-05-28
+
+### Fixed
+- **본문 연속 반복 라인 축약** — 충실도 강화(v1.0.0.18) 후 노출된 회귀 차단. 더듬거림
+  구간(예: "I'm not I'm not…")을 STT 가 여러 짧은 segment 로 끊고, 1단계 자유 번역이 한
+  문장으로 압축하면, 2-pass 2단계가 segment 수(strict schema)에 맞춰 **같은 문장을 반복으로
+  채우던** 문제 (실측 — 같은 화자가 동일 긴 문장 최대 16회 연속).
+  - `_collapse_repeated_lines` 신규 — 같은 화자 + 같은 텍스트가 **3회 이상 연속**이고
+    텍스트가 **10자 이상**이면 첫 라인만 남기고 제거 (timestamp 는 첫 라인 것).
+  - **보존**: 짧은 발화(네./맞습니다. < 10자, 횟수 무관)·다른 화자 동일 발화·marker
+    ([번역 누락]/[⚠ timeout]/음성 인식 오류). 임계는 실데이터(노트 반복 분포) 근거.
+  - 적용: `translate_transcript` 본문 조립 직후 (1-pass·2-pass 공통). 2-pass 로직·정렬/
+    freeform 프롬프트·`_post_process_two_pass_outputs`·충실도 강화 프롬프트 전부 무변.
+  - `tests/test_collapse_repeated_lines.py` 9건.
+
+## [1.0.0.18] - 2026-05-28
+
+### Changed
+- **본문 번역 — 충실 의역 전환** (환각·누락·영어 leak 차단). 기존 Rule 5 "자연스럽게
+  다듬어" 가 의역을 유발하고 환각/누락 방지 규칙이 없어, 실측에서 자조 농담의 정반대
+  해석 + 원문에 없는 한자 대조구 "(而非 문화적 정체)" 환각 + "which is what I am" 절 누락 +
+  "관세는acceptable하며" 영어 leak 발생:
+  - `TRANSLATION_SYSTEM_PROMPT` Rule 5 재구성 — "원문의 모든 절·정보를 빠짐없이 옮기고,
+    추임새·군더더기만 정리, 자연스럽게 재구성하되 추가·축약 금지".
+  - Rule 13(환각 금지)·14(누락 금지 — 자조·삽입절)·15(일반 영어 단어 미번역 금지, 병기/
+    약어/모델명 예외) 신규. 충실 의역 좋은 예/나쁜 예(드러켄밀러·acceptable 실측) 추가.
+  - 2-pass 1단계 자유 번역 문구를 "충실 번역(환각·누락·영어 leak 금지)" 으로 교체.
+  - 프롬프트 문구만 — 본문/2-pass 로직·후처리·요약/제목 프롬프트 무변. 실측 확인 —
+    자조 농담 보존 + 而非 0 + acceptable→"용인할 수 있다".
+  - 한계: 관용표현 이해는 모델 능력이라 새 패턴은 또 빠질 수 있음 (큰 방향 개선, 완벽 통제 아님).
+
+## [1.0.0.17] - 2026-05-28
+
+### Added
+- **노트에 생성 GuruNote 버전 표시 (추적성)** — 어느 빌드로 만든 노트인지 식별해, 발견한
+  품질 문제가 어느 버전 산출인지 추적:
+  - frontmatter `gurunote_version: "1.0.0.x"` (Obsidian 메타/검색·필터용).
+  - 본문 메타 블록에 `- **생성:** GuruNote v1.0.0.x` 한 줄 (재생 시간 아래).
+  - 버전은 `gurunote.__version__` 단일 출처에서 **동적 주입** (하드코딩 아님 — 버전 업 시 자동 반영).
+  - `exporter.py` `_build_frontmatter` + `build_gurunote_markdown` 메타 블록만 추가. 다른 로직 무변.
+
+## [1.0.0.16] - 2026-05-27
+
+### Changed
+- **제목 — 구조 직역 강화**. v1.0.0.15 의 "직역 우선" 이 모호해 LLM 이 형식을 뭉갠 의역
+  (예: "I Say Economy, You Say…" → "경제 단어 연상")을 내던 것을 교정:
+  - `METADATA_SYSTEM_PROMPT` organized_title 규칙에 **원문의 구조·형식·문답·말장난을 살려
+    직역** (형식 뭉개기·내용 요약 금지) 명시 + 좋은/나쁜 예 보강. (기존 "✓ 좋은 예" 가
+    오히려 형식 뭉갠 의역이라 LLM 을 잘못 유도하던 것을 구조 보존형으로 교체.)
+  - 실측 확인: "Bonus: I Say Economy, You Say…with Stan Druckenmiller" →
+    "보너스: 내가 '경제'라고 하면 당신은? — 스탠 드러켄밀러(Stan Druckenmiller)" (게임 문답 구조 보존).
+  - 인명 dict 교정·영문 병기·한자 후처리·youtube_title 유무 분기는 변경 없음. 프롬프트
+    레벨이라 완벽 통제는 아님 (가끔 노트 편집 보완).
+
+## [1.0.0.15] - 2026-05-27
+
+### Changed
+- **제목 — 원본 영상 제목이 있으면 직역 우선** (내용 요약 제목 생성 금지). 그동안 프롬프트가
+  "광고/불명확이면 새로 작성" 재량을 줘 원본이 있어도 내용 요약 제목(예: "스타니슬라프
+  드루킨밀러: 금리·관세…")이 나오던 것을 교정:
+  - `METADATA_SYSTEM_PROMPT` organized_title 규칙 강화 — 원본 제목 있으면 접두사("Bonus:")·
+    게임/코너 형식까지 살려 직역, **요약 제목 대체 금지**. 원본 부재 시에만 인물·주제 요약.
+  - `extract_metadata` 가 `youtube_title` 유무로 user 프롬프트에 직역/요약 신호를 명시 분기.
+
+### Fixed
+- **제목 인명 통용 표기 불일치** (예: Stan → "스타니슬라프 드루킨밀러"). 제목은
+  `extract_metadata` 의 독립 LLM 출력이라 본문 entity dict 교정을 안 거쳐 인명이 매 작업
+  달랐음. `_correct_korean_in_annotations` 신규 — `한국어(English)` 병기의 **영문 key 로
+  통용 dict 조회 → 한국어를 통용 표기로 강제** (user 우선). LLM 오음차여도 영문 원어로 복원,
+  dict 미수록·병기 없는 인명은 불변. `tests/test_title_korean_correction.py` 7건.
+
+## [1.0.0.14] - 2026-05-27
+
+### Fixed
+- **제목·요약 한자/일본어 혼입 차단 (Phase 3 보완)**. 한자 후처리가 본문(전체
+  스크립트)에만 적용되고 제목(`extract_metadata`)·요약(`summarize_translation`,
+  인사이트/타임라인)은 우회해, 실측에서 `직격谈话`(간체)·`設計`·`評価`(요약) 4건 leak.
+  - `post_process_cjk_text` 신규 — 본문 후처리의 Sub-path A(사전)+B(LLM 재매핑) 골격
+    재사용, **Sub-path C(영문 fallback, segment 의존)는 제외**한 segment-less 변형.
+    A·B 후에도 남는 한자는 그대로 둠 (드묾 — 노트 편집으로 보정).
+  - `summarize_translation` 반환 + `extract_metadata` 의 organized_title/field/tags 에 배선.
+    본문 `post_process_cjk`(translate_transcript)는 변경 없음 (회귀 방지).
+  - `cjk_lookup.yaml` 보강: 谈话→담화, 設計→설계, 評価→평가 등 (Sub-path A 결정론 적중).
+  - `tests/test_cjk_text_postprocess.py` 6건. 한자 없는 정상 텍스트는 무동작(과처리 부재).
+
+## [1.0.0.13] - 2026-05-27
+
+### Added
+- **노트 통용 표기 새로고침 (A-2 ③단계)** — 노트 상세의 "표기 새로고침" 버튼으로
+  이미 만든 노트의 옛 인명 표기(auto)를 수정 표기(user)로 **텍스트 치환**. 번역 LLM
+  재실행 없이 완성된 `result.md` 의 문자열만 교체:
+  - `refresh_canonical_in_markdown` — auto·user 둘 다 있는 항목만 대상. 일반형 +
+    태그 언더스코어형(`팰머_러커이`) 둘 다. **단일 패스 정규식**(긴 패턴 우선)이라 연쇄
+    치환 없음. auto 가 한국어라 **영어 원문 섹션·영문 병기는 자동 무영향**.
+  - bridge `refresh_job_canonical(job_id)` — `get_job_markdown` → 치환 →
+    `update_job_markdown`. 변경 0 이면 저장 생략. 갱신 markdown 반환(UI 재렌더).
+  - HistoryScreen 노트 상세에 버튼 + 갱신 후 본문 자동 재로드. `tests/test_canonical_refresh.py` 8건.
+  - 이로써 인명 품질 자동화(A-2: auto/user 구조 → 자동 채움 → 편집 UI → 노트 리프레시) 완결.
+
+## [1.0.0.12] - 2026-05-27
+
+### Added
+- **통용 표기 편집 UI (A-2 ②단계)** — 설정 → 고급에 "통용 표기" 그룹. GuruNote 가
+  자동으로 채운 표기(auto, 읽기 전용 회색)를 확인하고 틀린 것만 수정 표기(user)에
+  입력. 행 추가/삭제 + 전용 저장 버튼. user 가 있으면 user 우선 적용 (다음 작업부터,
+  재시작 불필요 — dict 는 작업마다 로드).
+  - bridge `get_canonical_names` / `save_canonical_names` 신규 — `llm.py` 의
+    `_load`/`_save_canonical_names` 호출만 (파일 I/O 단일 출처). `.env`
+    `get_settings`/`save_settings` 와 완전 별개 (별도 메서드·별도 state·별도 저장 버튼).
+  - 빈 영문/빈 항목은 저장 시 제외. 초기값 포함 전부 삭제 가능 (dict 비어도 정상).
+  - 노트 리프레시(③)는 다음 단계.
+
+## [1.0.0.11] - 2026-05-26
+
+### Added
+- **통용 표기 dict auto/user 구조 + 자동 채움 (A-2 ①단계, 백엔드 토대)**. 인명 통용
+  표기를 GuruNote 가 채우고 사용자는 틀린 것만 고치는 방식의 토대:
+  - dict 구조 `{English: {"auto": GuruNote 자동 표기, "user": 사용자 수정}}` 로 확장.
+    옛 flat `{English: "한국어"}` 는 값을 **user 로 자동 마이그레이션** (사용자 초기값으로 간주).
+  - **자동 채움**: 작업 중 본 고유명사의 **교정 전 raw 표기**를 `auto` 로 누적 저장
+    (`~/.gurunote/canonical_names.json`). `user` 는 절대 덮지 않음.
+  - **교정은 user 우선** (`user` 있으면 user, 없으면 auto) — entity/speaker 캐시 모두.
+  - atomic 저장(`tmp → os.replace`). 기존 교정 동작·하위 호환(flat dict 전달) 보존.
+  - 편집 UI(②)·노트 리프레시(③)는 다음 단계. `tests/test_canonical_auto_user.py` 7건.
+
+## [1.0.0.10] - 2026-05-26
+
+### Fixed
+- **인명 통용 표기 — 실제 영상에서 굳던 오표기 결정론적 교정 (A 보완)**. v1.0.0.6
+  프롬프트 강화 후에도 실제 영상은 "팰머 러커이"(Palmer Luckey) 가 굳던 문제. 재진단으로
+  3겹 원인 확정 — bootstrap 이 first-seen 표기 결정 / bootstrap 프롬프트에 발음-우선
+  지시 미반영 / **디스크 캐시 hit 시 옛 표기 로드(프롬프트 우회)**.
+  - 편집 가능한 통용 표기 dict `~/.gurunote/canonical_names.json` (English→한국어,
+    초기값 Palmer Luckey→팔머 럭키 / Rick Rieder→릭 리더) 신설. 2단계에서 설정 UI 편집 예정.
+  - `entity_cache` + `speaker_cache`(화자 라벨 — 본문 prefix 지배) 의 한국어 표기를 dict 로
+    **강제 교정** (대소문자 무시). dict 미수록 인명은 불변 (과교정 부재).
+  - 적용: bootstrap(디스크 캐시 hit 포함) 직후 + chunk 신규 entity — chunk loop 전 적용으로
+    프롬프트 context·화자 라벨이 교정된 표기 사용, 저장 시 디스크 캐시도 self-heal(재처리 시
+    옛 표기 교정).
+  - bootstrap LLM 프롬프트에도 발음-우선 지시·예시 추가 (dict 미수록 신규 인명용).
+  - `tests/test_canonical_name_correction.py` 7건. (B 영문 철자·화자·timestamp 회귀 부재.)
+
+## [1.0.0.9] - 2026-05-26
+
+### Added
+- **Obsidian 작업 완료 후 자동 내보내기** (설정 → Obsidian 토글, 기본 꺼짐) — 켜면
+  노트 생성이 끝날 때마다 자동으로 vault 에 내보낸다 (RAG 인덱스 있으면 연관 노트
+  wikilink 포함). 1단계 자동 삭제 동기화(v1.0.0.4)와 함께 자동 동기화 완성.
+  - `GURUNOTE_OBSIDIAN_AUTOEXPORT` 키 (`_KNOWN_SETTINGS`), **"1" 일 때만 on** (기본
+    꺼짐 — 미설정/"0" 은 off). 1단계 `SettingsSwitch` 재사용.
+  - 트리거 = React `App.onResult` (작업 완료 이벤트) 에서 토글 on 시
+    `api.send_obsidian(job_id)` 호출. **백엔드 파이프라인·`send_obsidian` 무변** (호출만).
+  - best-effort: 자동 내보내기 실패(또는 Vault 미설정)해도 작업 결과는 이미 저장돼
+    완료 흐름은 정상. 결과는 토스트로 알림.
+
+## [1.0.0.8] - 2026-05-26
+
+### Added
+- **설정 "고급"에 처리 옵션 토글** — 그동안 환경변수로만 조절하던 처리 옵션 2개를
+  앱에서 켜고 끌 수 있다:
+  - **2-pass 번역** (`GURUNOTE_TWO_PASS`) — 자유 번역 후 정렬하는 2단계 (정확도↑ 시간↑).
+  - **STT 의미 단위 재분할** (`GURUNOTE_SEGMENT_RESPLIT`) — 가독성·화자 정합↑.
+  - 재사용 `SettingsSwitch` 컴포넌트 신규. 두 키를 `_KNOWN_SETTINGS` 에 추가 →
+    `get_settings`/`save_settings`(.env + os.environ) 로 저장/로드. 백엔드 읽기 로직
+    (`llm.py` / `stt_mlx.py`) 은 그대로 — 키 추가 + UI 만.
+  - **기본값 보존**: 둘 다 기본 켜짐. 미설정(빈 값)은 ON 으로 표시하고 저장 시 항상
+    `"1"`/`"0"` 만 기록해, 기존 동작이 바뀌지 않는다.
+
+## [1.0.0.7] - 2026-05-26
+
+### Fixed
+- **영문 병기 철자 오염 차단 (Anduril → Danduril 류)**. LLM 이 `한국어(English)`
+  병기의 영문 원어를 자유 생성하다 철자를 틀리던 문제 (제목 포함) 를 소스에 실재하는
+  철자로 결정론적 검증:
+  - `_correct_english_annotations` — 소스(transcript 전문 + 제목)에 정확히 있으면 케이싱
+    정규화, 단일 토큰 오타는 보수적 최근접(difflib, cutoff 0.84, 대소문자 무시)으로 교정,
+    근거 없으면 **병기 생략** (틀린 철자를 박지 않음). LLM 무관 순수 함수.
+  - 적용: 번역 본문 (`translate_transcript` 최종), organized_title (`extract_metadata`
+    — entity_cache 미참조라 별도 검증).
+  - 한국어 음차·화자 라벨·timestamp 는 건드리지 않음. `tests/test_english_annotation_source_check.py` 8건 추가.
+
+## [1.0.0.6] - 2026-05-25
+
+### Changed
+- **인명 음차 — 통용 표기 우선 (번역 프롬프트 강화)**. 통용 표기 dict 에 없는 유명
+  인물·기업을 LLM 이 외래어 표기법 규칙으로 **철자 기반** 추정해 통용과 어긋나던 문제
+  (예: Palmer Luckey→"팰머 러커이", Rick Rieder→"리크 리더") 개선:
+  - Rule 10 머리에 표기 결정 우선순위 명시 — ① 통용 표기(철자 아닌 **발음** 기준 음차)
+    ② 통용 표기 목록 ③ 외래어 표기법 규칙은 모르는 이름의 fallback (통용을 덮어쓰지 않음).
+  - 공통 룰의 통용 표기 dict 에도 발음 우선 안내 미러링.
+  - 짧은 테스트 확인: Palmer Luckey→**팔머 럭키**, Rick Rieder→**릭 리더** (오표기 0).
+  - dict 수정·외래어 규칙·entity_cache 로직 변경 없음 (프롬프트 지시만).
+
+## [1.0.0.5] - 2026-05-25
+
+### Changed
+- **Obsidian 내보내기 파일명에서 `GuruNote_` 접두사 제거** — 파일명이 작업물 제목
+  (`<sanitize(title)>.md`) 으로만 구성돼 Vault 그래프에서 제목 가독성이 좋아진다.
+  출처 구분은 frontmatter `gurunote_job_id` 표식 + `Gurunote/` 하위 폴더가 담당하므로
+  접두사가 불필요. 파일명과 `## 연관 노트` wikilink stem 이 같은 helper
+  (`_obsidian_note_stem`) 를 거쳐 항상 일치 — 그래프 연결 유지.
+  - 삭제 동기화는 frontmatter 표식 기반이라 영향 없음.
+  - **이미 내보낸 `GuruNote_` 접두사 파일은 그대로** (앞으로 내보내는 노트부터 적용) —
+    필요 시 사용자가 수동 정리.
+
+## [1.0.0.4] - 2026-05-25
+
+### Added
+- **라이브러리 삭제 ↔ Obsidian vault 동기화** — History 에서 노트를 삭제하면
+  내보냈던 Obsidian 사본도 함께 삭제된다. `send_obsidian` 이 내보낼 때 frontmatter 에
+  남기는 `gurunote_job_id` 표식으로 정확히 그 파일만 매칭 (`obsidian.delete_from_vault`).
+  - 표식이 없는 (이번 버전 이전에 내보낸) vault 파일은 매칭되지 않아 **삭제되지 않는다**
+    — 사용자가 수동 정리. 앞으로 내보내는 노트부터 동기화.
+  - best-effort: vault 삭제가 실패해도 라이브러리 삭제는 진행되고 결과만 알린다.
+  - 삭제 확인 다이얼로그는 vault 에 표식 사본이 실제 있을 때만 "Obsidian 사본도 함께
+    삭제됩니다" 안내 (`has_vault_copy`). 완료 토스트에 삭제한 사본 수 표시.
+
+## [1.0.0.3] - 2026-05-25
+
+### Added
+- **Obsidian 내보내기 활성화** — History 카드 hub 아이콘과 노트 상세 "Obsidian"
+  버튼이 저장된 노트를 Obsidian Vault 로 내보낸다 (`bridge.send_obsidian`,
+  기존 `gurunote/obsidian.py` `save_to_vault` 재사용). Vault 경로는 설정 → Obsidian
+  에서 지정 (`OBSIDIAN_VAULT_PATH`), 미설정 시 안내.
+- **RAG 유사 노트 wikilink** — 내보낼 때 의미 검색으로 유사 노트 top 5 (유사도 ≥ 0.5)
+  를 본문 끝 `## 연관 노트` 섹션 (`- [[GuruNote_<제목>|제목]] (78%)`) + frontmatter
+  `related` 로 삽입. Obsidian 그래프에서 노트끼리 연결된다 (상대 노트도 내보내면
+  링크 연결; 미내보낸 노트는 미래 링크로 허용). RAG 미설치/인덱스 없으면 연관 노트
+  없이 내보낸다. 저장된 `result.md` 는 손대지 않고 Vault 사본에만 삽입.
+
+### Changed
+- History 카드 hub 아이콘이 "상세 열기" 중복 동작이던 것을 "Obsidian 으로 내보내기"
+  로 교체 (hub = Obsidian, 설정 화면 Obsidian 섹션 아이콘과 정합). 노트 상세의
+  RAG "연관 노트" (앱 내 검색) 는 별도 아이콘 (`device_hub`) 으로 유지.
+
+## [1.0.0.2] - 2026-05-25
+
+### Added
+- **의미 검색 (RAG) React UI 재배선** (백로그 B12) — 기존 `gurunote/semantic.py`
+  (sentence-transformers 임베딩 + 코사인 유사도) 를 React UI 에 연결:
+  - 대시보드 "의미 검색 인덱스" 카드 — 모델 / chunk 수 / 작업 수 / 빌드 시각 실데이터
+    표시 + "Semantic Rebuild" 버튼으로 인덱스 빌드.
+  - History "의미 검색" 칩 — 검색어로 의미 유사 노트를 찾아 결과 오버레이 표시.
+  - 노트 상세 "연관 노트" 버튼 — 현재 노트와 의미가 유사한 노트 top-K 표시.
+  - 선택 의존성 (`requirements-search.txt`) 미설치 시 대시보드 카드에 설치 안내.
+  - bridge: `rebuild_index` / `semantic_index_stats` / `semantic_search` /
+    `semantic_available` 구현 (semantic.py 호출만, 로직 변경 없음).
+
+## [1.0.0.1] - 2026-05-25
+
+### Added
+- 노트 상세 화면 "출처" URL 을 클릭 가능한 링크로 변경 — 클릭 시 시스템 브라우저로 열림
+  (`bridge.open_external`, http/https 만 허용). 옆에 URL 복사 버튼 추가.
+
+### Fixed
+- HistoryScreen (라이브러리) 다운로드 버튼이 동작하지 않던 문제 — 목록 카드·상세 패널
+  양쪽 모두 실제 마크다운 저장(`save_result_as`, 네이티브 저장 다이얼로그)에 연결.
+  기존에는 "Phase 2B-4 다운로드 wiring 예정" 안내만 표시됨 (백로그 B11).
 
 ## [1.0.0.0] - 2026-05-24
 
@@ -1411,7 +1757,33 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.2...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.28...HEAD
+[1.0.0.28]: https://github.com/avlp12/GuruNote/compare/v1.0.0.27...v1.0.0.28
+[1.0.0.27]: https://github.com/avlp12/GuruNote/compare/v1.0.0.26...v1.0.0.27
+[1.0.0.26]: https://github.com/avlp12/GuruNote/compare/v1.0.0.25...v1.0.0.26
+[1.0.0.25]: https://github.com/avlp12/GuruNote/compare/v1.0.0.24...v1.0.0.25
+[1.0.0.24]: https://github.com/avlp12/GuruNote/compare/v1.0.0.23...v1.0.0.24
+[1.0.0.23]: https://github.com/avlp12/GuruNote/compare/v1.0.0.22...v1.0.0.23
+[1.0.0.22]: https://github.com/avlp12/GuruNote/compare/v1.0.0.21...v1.0.0.22
+[1.0.0.21]: https://github.com/avlp12/GuruNote/compare/v1.0.0.20...v1.0.0.21
+[1.0.0.20]: https://github.com/avlp12/GuruNote/compare/v1.0.0.19...v1.0.0.20
+[1.0.0.19]: https://github.com/avlp12/GuruNote/compare/v1.0.0.18...v1.0.0.19
+[1.0.0.18]: https://github.com/avlp12/GuruNote/compare/v1.0.0.17...v1.0.0.18
+[1.0.0.17]: https://github.com/avlp12/GuruNote/compare/v1.0.0.16...v1.0.0.17
+[1.0.0.16]: https://github.com/avlp12/GuruNote/compare/v1.0.0.15...v1.0.0.16
+[1.0.0.15]: https://github.com/avlp12/GuruNote/compare/v1.0.0.14...v1.0.0.15
+[1.0.0.14]: https://github.com/avlp12/GuruNote/compare/v1.0.0.13...v1.0.0.14
+[1.0.0.13]: https://github.com/avlp12/GuruNote/compare/v1.0.0.12...v1.0.0.13
+[1.0.0.12]: https://github.com/avlp12/GuruNote/compare/v1.0.0.11...v1.0.0.12
+[1.0.0.11]: https://github.com/avlp12/GuruNote/compare/v1.0.0.10...v1.0.0.11
+[1.0.0.10]: https://github.com/avlp12/GuruNote/compare/v1.0.0.9...v1.0.0.10
+[1.0.0.9]: https://github.com/avlp12/GuruNote/compare/v1.0.0.8...v1.0.0.9
+[1.0.0.8]: https://github.com/avlp12/GuruNote/compare/v1.0.0.7...v1.0.0.8
+[1.0.0.7]: https://github.com/avlp12/GuruNote/compare/v1.0.0.6...v1.0.0.7
+[1.0.0.6]: https://github.com/avlp12/GuruNote/compare/v1.0.0.5...v1.0.0.6
+[1.0.0.5]: https://github.com/avlp12/GuruNote/compare/v1.0.0.4...v1.0.0.5
+[1.0.0.4]: https://github.com/avlp12/GuruNote/compare/v1.0.0.3...v1.0.0.4
+[1.0.0.3]: https://github.com/avlp12/GuruNote/compare/v1.0.0.2...v1.0.0.3
 [1.0.0.2]: https://github.com/avlp12/GuruNote/compare/v1.0.0.1...v1.0.0.2
 [1.0.0.1]: https://github.com/avlp12/GuruNote/compare/v1.0.0.0...v1.0.0.1
 [1.0.0.0]: https://github.com/avlp12/GuruNote/compare/v0.8.0.6...v1.0.0.0

@@ -1,0 +1,29 @@
+{
+ "url": "https://youtu.be/zNuOOMM20Tk",
+ "video_id": "zNuOOMM20Tk",
+ "title": "Inside AI Tokenomics: How to Profitably Turn Tokens Into Business Value | NVIDIA AI Podcast Ep. 299",
+ "duration": 2005.0,
+ "segments": 294,
+ "speakers_stt": {
+  "A": 235,
+  "B": 59
+ },
+ "speakers_body": {
+  "노아 크래비츠": 234,
+  "슈루티 코파르카": 58,
+  "노아 크래비츠(Noah Kravitz)": 1,
+  "슈루티 코파르카(Shruti Koparkar)": 1
+ },
+ "stt_elapsed": 222.34723591804504,
+ "trans_elapsed": 461.1135129928589,
+ "body_lines": 588,
+ "cjk_chars": 0,
+ "segment_resplit_flag": true,
+ "total_chunks": 28,
+ "match_exact": 20,
+ "match_less": 8,
+ "match_extreme": 1,
+ "timeouts": 0,
+ "length_mismatch": 4,
+ "empty_recoveries": 0
+}

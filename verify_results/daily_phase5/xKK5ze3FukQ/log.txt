@@ -1,0 +1,41 @@
+MLX Whisper 모델 로딩 (mlx-community/whisper-large-v3-mlx)...
+전사 중 (Apple GPU 가속, 단어 레벨 타임스탬프)...
+전사 완료 — 96 세그먼트, 언어=en
+화자 분리 중 (pyannote, MPS 가속)...
+화자 분리 완료 — 27 발화 구간
+세그먼트 재분할 (GURUNOTE_SEGMENT_RESPLIT=1) — 96 → 53 segments (의미 단위 병합)
+세그먼트 필터링 — empty/noise 4, duplicate 0 제거 (96 → 49)
+MLX 전사 완료 — 49 세그먼트, 5 화자
+🌐 LLM 번역 시작 — 5 청크 (cs=12, char_limit=2000, 재분할 적용) (openai_compatible/qwen3.6-35b-q5)
+📖 영상 컨텍스트(게시일/챕터/자막)를 LLM 에 주입합니다.
+   📚 entity cache bootstrap — 6건 사전 추출
+   🎤 speaker cache bootstrap — 3명 식별
+   ↳ 청크 1/5 번역 중…
+   ↳ 2-pass 1단계: 자유 번역 (12 segments)
+   📝 2-pass 1단계 출력 — 12 lines / N=12, empty lines: 0
+   ↳ 2-pass 2단계: 정렬 (12 outputs schema strict)
+   ✅ Index Mapping 정합 — 12 outputs (finish_reason=stop)
+   ↳ 청크 2/5 번역 중…
+   ↳ 2-pass 1단계: 자유 번역 (12 segments)
+   📝 2-pass 1단계 출력 — 12 lines / N=12, empty lines: 0
+   ↳ 2-pass 2단계: 정렬 (12 outputs schema strict)
+   ✅ Index Mapping 정합 — 12 outputs (finish_reason=stop)
+   ↳ 청크 3/5 번역 중…
+   ↳ 2-pass 1단계: 자유 번역 (12 segments)
+   📝 2-pass 1단계 출력 — 12 lines / N=12, empty lines: 0
+   ↳ 2-pass 2단계: 정렬 (12 outputs schema strict)
+   ✅ Index Mapping 정합 — 12 outputs (finish_reason=stop)
+   ↳ 청크 4/5 번역 중…
+   ↳ 2-pass 1단계: 자유 번역 (12 segments)
+   📝 2-pass 1단계 출력 — 1 lines / N=12, empty lines: 0
+   ↳ 2-pass 2단계: 정렬 (12 outputs schema strict)
+   ✅ Index Mapping 정합 — 12 outputs (finish_reason=stop)
+   ↳ 청크 5/5 번역 중…
+   ↳ 2-pass 1단계: 자유 번역 (1 segments)
+   📝 2-pass 1단계 출력 — 1 lines / N=1, empty lines: 0
+   ↳ 2-pass 2단계: 정렬 (1 outputs schema strict)
+   ✅ Index Mapping 정합 — 1 outputs (finish_reason=stop)
+✅ 번역 완료
+   💾 entity cache 저장: 6건 / speakers 3명 → xKK5ze3FukQ
+   🔧 Phase 3 후처리 — Sub-A 0건, Sub-B 1건, Sub-C fallback 0건
+   🔧 entity canonicalize 적용 (6건 cache, 줄 수 96 → 96)

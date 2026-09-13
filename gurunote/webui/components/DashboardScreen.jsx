@@ -241,41 +241,95 @@ function FieldDistribution({ data }) {
   );
 }
 
-/* 의미 검색 인덱스 — Phase 3A (RAG) 까지 disabled placeholder. */
-function SemanticIndexPlaceholder() {
-  const handleClick = () => {
-    if (window.showToast) {
-      window.showToast('의미 검색 인덱스는 Phase 3A (RAG) 에서 활성화됩니다.', 'info');
+/* 의미 검색 인덱스 — gurunote.semantic 재배선 (B12).
+   마운트 시 통계 로드, Rebuild 버튼 → bridge.rebuild_index. 선택 의존성
+   (requirements-search.txt) 미설치 시 안내. */
+function SemanticIndexCard() {
+  const [info, setInfo] = useState(null);   // {available, built, model, num_chunks, num_jobs, built_at}
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    try {
+      while (!window.pywebview?.api) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      const r = await window.pywebview.api.semantic_index_stats();
+      if (r?.ok) setInfo(r);
+    } catch (e) {
+      console.warn('[SemanticIndexCard] stats:', e);
     }
   };
+  useEffect(() => { refresh(); }, []);
+
+  const handleRebuild = async () => {
+    if (busy) return;
+    setBusy(true);
+    window.showToast?.('의미 검색 인덱스를 빌드합니다… (첫 실행 시 모델 ~117MB 다운로드)', 'info');
+    try {
+      const r = await window.pywebview.api.rebuild_index();
+      if (r?.ok) {
+        window.showToast?.(`인덱스 빌드 완료: ${r.num_jobs}개 노트 / ${r.num_chunks} chunk`, 'success');
+        await refresh();
+      } else {
+        window.showToast?.(`빌드 실패: ${r?.error || '알 수 없는 오류'}`, 'error');
+      }
+    } catch (e) {
+      window.showToast?.(`빌드 오류: ${e.message || e}`, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 의존성 미설치 — 안내 (카드 자체에 표시, toast 아님).
+  if (info && info.available === false) {
+    return (
+      <div className="semantic-card semantic-card--disabled">
+        <div style={{ fontSize: 12, color: 'var(--gn-on-surface-muted)', lineHeight: 1.6, padding: '4px 0 10px' }}>
+          의미 검색 의존성이 설치되지 않았습니다.<br />
+          <code>pip install -r requirements-search.txt</code><br />
+          설치 후 재실행하면 활성화됩니다.
+        </div>
+        <button type="button" className="btn btn--ghost btn--sm semantic-card__action" disabled>
+          <span className="msi">refresh</span>
+          Semantic Rebuild
+        </button>
+      </div>
+    );
+  }
+
+  const built = info?.built;
+  const fmt = (v) => (v === undefined || v === null || v === '' ? '—' : v);
+  const builtAt = built && info?.built_at ? String(info.built_at).replace('T', ' ').slice(0, 16) : '—';
+
   return (
-    <div className="semantic-card semantic-card--disabled">
+    <div className={'semantic-card' + (busy ? ' semantic-card--busy' : '')}>
       <div className="semantic-card__rows">
         <div className="semantic-card__row">
           <span className="semantic-card__k">모델</span>
-          <span className="semantic-card__v">—</span>
+          <span className="semantic-card__v">{built ? fmt(info?.model) : '—'}</span>
         </div>
         <div className="semantic-card__row">
           <span className="semantic-card__k">Chunks</span>
-          <span className="semantic-card__v">—</span>
+          <span className="semantic-card__v">{built ? fmt(info?.num_chunks) : '—'}</span>
         </div>
         <div className="semantic-card__row">
           <span className="semantic-card__k">작업 수</span>
-          <span className="semantic-card__v">—</span>
+          <span className="semantic-card__v">{built ? fmt(info?.num_jobs) : '—'}</span>
         </div>
         <div className="semantic-card__row">
           <span className="semantic-card__k">빌드 시각</span>
-          <span className="semantic-card__v">—</span>
+          <span className="semantic-card__v">{builtAt}</span>
         </div>
       </div>
       <button
         type="button"
         className="btn btn--ghost btn--sm semantic-card__action"
-        onClick={handleClick}
-        title="Phase 3A (RAG) 에서 활성화"
+        onClick={handleRebuild}
+        disabled={busy}
+        title={built ? '인덱스 재빌드' : '인덱스 처음 빌드'}
       >
         <span className="msi">refresh</span>
-        Semantic Rebuild
+        {busy ? '빌드 중…' : (built ? 'Semantic Rebuild' : '인덱스 빌드')}
       </button>
     </div>
   );
@@ -459,7 +513,7 @@ function DashboardScreen({ items, loading, error }) {
               <FieldDistribution data={fieldData} />
             </DashCard>
             <DashCard icon="auto_awesome" title="의미 검색 인덱스">
-              <SemanticIndexPlaceholder />
+              <SemanticIndexCard />
             </DashCard>
             <DashCard
               icon="show_chart"

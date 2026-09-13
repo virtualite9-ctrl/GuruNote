@@ -228,7 +228,48 @@
 → F3QDC7HDMyg 38분 영상 catch 부족
 → char_limit=2000 검증
 → 통합 본체 검증 (모델 비의존 hardness 도달)
+→ daily 검증 영상 2개 토글 on (5/24 저녁, `6dc9934`)
+→ default on 결정 (off 안전망 유지)
+→ v1.0.0.0 선언 + README 60% 재작성 (`2971939`)
+→ main 통합 시 unrelated histories 발견 (4bcbee6 vs af50c2e)
+→ archive/main-pre-cli 보존 + force-with-lease 통일
 ```
+
+## 4-1. Phase 5 마무리 (5/24, `6dc9934`) — 짧은 추적
+
+**daily 검증 영상 2 개 토글 on 측정**:
+- xKK5ze3FukQ (Boston Dynamics, 5.7 분): 96 → 49 segments (-49 %), timeout 0, CJK 0, **5 명 화자 중 3 명만 bootstrap 식별** — 메타데이터 한계 (백로그 B08 등록)
+- zNuOOMM20Tk (NVIDIA Podcast, 33.4 분): 586 → 294 segments (-50 %), timeout 0, CJK 0, 2/2 화자 식별
+
+**결정 사슬**:
+1. 토글 on 결과 통과 → default 전환 후보
+2. test 2 건 회귀 — `test_default_off_uses_one_pass` (`delenv` 가정) 가 default on 으로 변경 시 깨짐
+3. test 의도 갱신: `test_explicit_off_uses_one_pass` (env=`0` 명시 시 1-pass) + `test_env_default_on` (env 부재 시 `1`)
+4. 183 tests passed → commit + push
+
+## 4-2. v1.0.0.0 + main 통합 (5/24 저녁) — 사전 점검 + 안전망
+
+**gui.py/app.py legacy 이동 검토 → 결정적 의존성 사전 발견**:
+- 초기 의도: gui.py / app.py 둘 다 `docs/legacy/` 이동
+- 참조 스캔 결과: `gurunote/webui/session.py:67` 에 `from gui import PipelineWorker` — React UI 가 옛 CustomTkinter UI 파일의 클래스를 import
+- 진단: `gui.py` (CustomTkinter) 안에 `PipelineWorker` 클래스가 들어있고, React UI 가 그걸 그대로 사용. legacy 이동 시 React UI 깨짐.
+- 결정 (Path C, ADR-013): 파일 이동 0, README/안내만 갱신. `PipelineWorker` 분리는 백로그 B09.
+
+**main 통합 시 unrelated histories 발견**:
+1. `git fetch origin` 후 `git log --left-right --graph origin/main...redesign/tailwind-v2` — `>` 만 보임, `<` 부재
+2. `git merge-base origin/main redesign/tailwind-v2` — **빈 결과 반환**
+3. `git log --reverse` 양쪽 첫 commit: main `4bcbee6 Initial commit` vs redesign `af50c2e Initial commit` — 같은 메시지, 다른 hash
+4. 진단: 두 브랜치가 별도 `git init` 으로 시작한 별개 트리. 공통 조상 부재. 본인 기억으로는 4/19 직후 웹 Claude → 로컬 CLI Claude Code 전환 시 환경 변경.
+5. STOP RULE 발동 — 본인 결정 path 4 가지 제시 후 본인 선택 (옛 main archive 보존 + force-with-lease).
+
+**안전망 시퀀스 (force push 전 필수)**:
+1. `git branch archive/main-pre-cli origin/main`
+2. `git push origin archive/main-pre-cli` → `9b6c62...` 확인 (211 commit, root `4bcbee6` 도달)
+3. `git merge-base --is-ancestor 4bcbee6 archive/main-pre-cli` → 통과
+4. `git checkout main && git reset --hard redesign/tailwind-v2`
+5. `git push origin main --force-with-lease` → `+ 9b6c621...2971939 main -> main (forced update)` 성공
+
+**해결**: ADR-012 안전망 보존 + force-with-lease 통일.
 
 ---
 
@@ -251,8 +292,52 @@
 ### 측정 오판 정직 catch (보고서에 catch)
 
 - 5/24 [320.7] leak 부재 — 첫 보고 정정
-- 5/24 2-pass cs=12 process 중간 종료 보고 → 정상 완료 catch — 본인 정정
+- 5/24 2-pass cs=12 process 중간 종료 보고 → 정상 완료 — 본인 정정
+- 5/28 타임스탬프 토글을 exporter(데이터) 층에 붙인 적용 지점 오판 → revert → 뷰어(표시) 층 재구현 (§7)
+- 5/29 자동 내보내기 "성공 토스트 누락 버그" 보고 → 계측으로 r=ok:true 확인, 4초 표시 안에 놓친 인지 문제 = 버그 아님 (§8)
+
+## 6. v1.0.0.6~0.7 인명/고유명사 품질 (5/26)
+
+**진단 (read-only)**: daily 노트에서 두 종류 오류 — (A) 음차 방향 "팰머 러커이/리크 리더"(통용은 팔머 럭키/릭 리더), (B) 영문 병기 철자 "안두릴(Danduril)"(원문 Anduril). 코드 추적으로 원인 분리:
+- (A) 통용 dict 미수록 인명 → LLM 이 외래어 표기법 규칙(`llm.py:144`)으로 철자 추정 → `entity_cache` 가 그 첫 표기를 first-seen 고정(`_extract_entities` 가 LLM 출력 prefix 에서 harvest) → **"일관되게 틀림"** (340/280 회 변형 0 은 캐시가 일관성만 보장한 결과).
+- (B) 원본 제목·다운로드 로그는 Anduril 정확, **LLM 생성 organized_title 이 Danduril** → STT 아님, 번역 단계 자유 생성 오염. `summarize/extract_metadata` 가 원본 제목(정답)을 입력받고도 오염 → 소스를 프롬프트에 넣는 것만으론 부족, 능동 검증 필요.
+
+**B 구현 중 함정 2건** (검증으로 catch):
+1. **소유격 토큰화 함정** — 소스에서 영문 단어 풀을 `[A-Za-z][A-Za-z0-9.\-']*` 로 뽑으니 `Anduril's` 가 한 토큰 → standalone `Anduril` 부재 → "Danduril" 의 difflib 매칭 실패(생략). **순수 알파벳 `[A-Za-z]+` 분리**로 `Anduril's` → `Anduril`+`s` 해결.
+2. **difflib 대소문자 함정** — `get_close_matches` 가 대소문자 구분이라 "Danduril"(대문자 D) vs "Anduril"(대문자 A) 의 a/A 케이스 불일치로 ratio 0.8 < 0.84 → 매칭 실패. **소문자로 매칭 후 케이싱 복원** (case_map) → ratio 0.93, 교정 성공.
+
+**해결**: (A) `77dd6b0` 프롬프트 Rule 10 우선순위 역전. (B) `8f836a0` `_correct_english_annotations` 결정론적 소스 검증. 둘 다 end-to-end 동시 확인 (팔머 럭키/릭 리더 + Anduril 정확/Danduril 0).
+
+> 프로세스 메모: B14 삭제 동기화 검증 시 `delete_history`(실제 job 삭제) REPL 호출이 prod 데이터 보호 분류기에 차단됨 — vault 측 `delete_from_vault` 독립 검증(임시 vault)으로 대체. 정직 기록.
 
 ---
 
-**자료 출처**: 1.x는 본인 기억 2차 사료 + git/CHANGELOG. 2.x/3.x는 session_history_digest + git log + backlog.md 1차/혼합. 4/5는 본 세션 본인 catch.
+## 7. 타임스탬프 토글 — 적용 지점 오판 → revert → 재구현 (v1.0.0.21, 5/28~29)
+
+**현상**: 뷰어에서 한국어·영어 원문의 `[MM:SS]` 타임스탬프를 화면에서만 켜고 끄는 토글이 필요.
+
+**추적 사슬**:
+1. **첫 구현 — 적용 지점 오판** (`9a12566`, "전체 스크립트 타임스탬프 표시 토글 (설정)"): 토글을 설정 + exporter 경로에 붙임. 의도는 "뷰어 표시 단계"에서만 끄는 것(원본 불변)인데, 적용 지점이 어긋남.
+2. **정직한 되돌림** (`c3b58bb` Revert): 잘못 적용한 커밋을 git revert 로 깔끔히 되돌림(부분 수선 대신 통째 revert).
+3. **뷰어판 재구현** (`ca9ebf1`): `ResultPanel` 의 useState 로 한·영 탭에서만, 표시 직전 정규식으로 `[MM:SS]` 만 떼어냄. 화자명·원본(result.md) 불변.
+4. 같은 묶음에서 본문 **드래그 복사** 불가도 수정(`26b3f2a`, `user-select: text` 명시).
+
+**측정/적용 오판 정정**: "표시 토글"을 데이터(exporter) 층에 붙인 것이 오판. 표시 전용 기능은 표시 층(뷰어)에만 둬야 원본이 안전하다 — revert 후 뷰어판으로 바로잡음. 두 commit(오판 + revert)을 history 에 남겨 추적 가능.
+
+## 8. 자동 내보내기 토스트 "버그 아님" 규명 + temperature 한계 (5/29)
+
+**현상 보고**: 자동 내보내기가 vault 에 .md 는 만드는데 "성공" 토스트가 안 뜬다고 보고됨. 수동 버튼은 정상.
+
+**추적 사슬**:
+1. 정적 코드 분석 — 성공 토스트(`App.jsx`)와 NO_VAULT 토스트가 같은 if/else 사슬·같은 await 깊이. 같은 `showToast`·같은 컨테이너(항상 mount). 코드 논리상 새 job_id 첫 내보내기는 성공 분기에 들어가야 함 → **정적으로 모순**.
+2. **임시 계측** — await 직후 반환값 `r` 을 토스트로 노출(v1.0.0.26 직전, `bc830a0`).
+3. 실측 — 새 영상 첫 자동 내보내기에서 성공 토스트(초록 보더)가 **정상으로 떴음**. 토스트가 4초 후 사라져 사용자가 그 순간 놓친 것 = **버그 아님**.
+4. 역할을 마친 계측 제거 + 타입별 좌측 보더 시각 구분 영구화(`a05925c`, ADR-022) — 이후 성공/건너뜀/실패를 색으로 구분.
+
+**measurement 오판 정정**: "토스트 누락 버그"로 보고됐으나 실제는 표시 시간(4초) 안에 놓친 인지 문제. 계측으로 r=ok:true 확인 후 "버그 아님" 확정 — 코드 수정 0.
+
+**별건 — temperature 0.6 품질 편차 (드러켄밀러 재처리)**: 같은 영상 재처리에서 temperature 0.6 에서도 `formidable`/`brilliant`/`Rates` 영어 누출 + 원문에 없는 "제롬 파월" 환각 재확인. ADR-019(0.6 유지) 의 한계 증거. 프롬프트·temperature 로는 고유명사 오류를 못 막음 → 검색 그라운딩(ADR-020) + 요약 충실도(B22) 대상.
+
+---
+
+**자료 출처**: 1.x는 본인 기억 2차 사료 + git/CHANGELOG. 2.x/3.x는 session_history_digest + git log + backlog.md 1차/혼합. 4/5는 본 세션 본인 catch. 6은 5/26 본 세션 진단·구현 catch.

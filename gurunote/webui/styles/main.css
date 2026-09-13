@@ -313,6 +313,10 @@
   word-break: keep-all;
   overflow-wrap: break-word;
   color: var(--gn-on-surface);
+  /* 본문 텍스트 선택 + 복사 영역 — webview default 영역의 selectability 명시 (.log-pane 정합). */
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 .result-transcript strong {
   font-weight: 600;
@@ -320,6 +324,10 @@
 .result-rendered {
   font-size: 14px;
   line-height: 1.65;
+  /* 요약 텍스트 선택 + 복사 영역 — webview default 영역의 selectability 명시 (.log-pane 정합). */
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 .result-rendered h1, .result-rendered h2, .result-rendered h3 {
   margin: 1.2em 0 0.5em;
@@ -402,5 +410,10 @@
   opacity: 1;
   transform: translateY(0);
 }
-/* Type modifier (info/success/warning/error) 는 className 으로 유지되지만
-   시각 차이 없음 — JSX 측은 변경 없이 메시지 텍스트로 의미 표현. */
+/* Type modifier — 좌측 보더 색으로 구분. 배경은 불투명 흰색 그대로 유지하여
+   Phase 2B-6d 가독성 결정(반투명 tint 제거)을 존중 — tint 배경은 재도입하지 않음.
+   기존 --gn-* 토큰 재사용. info 는 전용 토큰이 없어 primary 차용. */
+.toast--success { border-left: 3px solid var(--gn-success); }
+.toast--warning { border-left: 3px solid var(--gn-warning); }
+.toast--error   { border-left: 3px solid var(--gn-danger); }
+.toast--info    { border-left: 3px solid var(--gn-primary); }

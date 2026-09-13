@@ -32,8 +32,16 @@ const RP_TABS = [
   { id: 'log',     label: 'Log',      icon: 'terminal' },
 ];
 
+/* 보기 전용 타임스탬프 strip — 한국어 줄머리 `[MM:SS] ` 와 영어 `**[MM:SS] ` 안쪽을
+   한 정규식으로 제거 (화자명·`**` 굵게 구조 유지). marker `[번역 누락]` 등은 `\d`
+   불일치라 보존. 원본 문자열은 불변 — renderTranscript 직전 표시용으로만 호출.
+   정규식 리터럴은 호출마다 새로 생성되어 /g lastIndex 상태 공유 부재. */
+const RP_STRIP_TS = (s) => s.replace(/(^|\*\*)\[\d{1,2}:\d{2}(?::\d{2})?\]\s+/gm, '$1');
+
 function ResultPanel({ result, log }) {
   const [activeTab, setActiveTab] = RP_useState('summary');
+  // 보기 전용 타임스탬프 토글 — 기본 보임(현 동작). 클라이언트 표시 상태, 영속화 부재.
+  const [showTimestamps, setShowTimestamps] = RP_useState(true);
 
   // log: array (live) 또는 string (History) 정규화 → array
   const logLines = Array.isArray(log)
@@ -86,6 +94,28 @@ function ResultPanel({ result, log }) {
             )}
           </button>
         ))}
+        {(activeTab === 'korean' || activeTab === 'english') && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showTimestamps}
+            aria-label="타임스탬프 표시"
+            title="전체 스크립트 타임스탬프 표시 전환 (보기 전용 — 원본 불변)"
+            onClick={() => setShowTimestamps((v) => !v)}
+            style={{
+              marginLeft: 'auto', alignSelf: 'center',
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '2px 10px', fontSize: 12, borderRadius: 12,
+              border: '1px solid var(--gn-border-subtle, #444)',
+              background: showTimestamps ? 'var(--gn-primary, #3b82f6)' : 'transparent',
+              color: showTimestamps ? '#fff' : 'var(--gn-on-surface-muted, #888)',
+              cursor: 'pointer', transition: 'background 100ms, color 100ms',
+            }}
+          >
+            <span className="msi" style={{ fontSize: 14 }}>schedule</span>
+            타임스탬프
+          </button>
+        )}
       </div>
 
       {activeTab === 'summary' && summaryHtml && (
@@ -97,7 +127,7 @@ function ResultPanel({ result, log }) {
 
       {activeTab === 'korean' && (
         result?.korean_transcript
-          ? <div className="result-transcript">{renderTranscript(result.korean_transcript, false)}</div>
+          ? <div className="result-transcript">{renderTranscript(showTimestamps ? result.korean_transcript : RP_STRIP_TS(result.korean_transcript), false)}</div>
           : <div className="result-empty">처리 완료 후 표시됩니다.</div>
       )}
 
@@ -105,7 +135,7 @@ function ResultPanel({ result, log }) {
         result?.english_transcript === ''
           ? <div className="result-empty">이 노트는 한국어 원본 콘텐츠입니다 — 원문 스크립트 섹션 부재.</div>
           : result?.english_transcript
-            ? <div className="result-transcript">{renderTranscript(result.english_transcript, true)}</div>
+            ? <div className="result-transcript">{renderTranscript(showTimestamps ? result.english_transcript : RP_STRIP_TS(result.english_transcript), true)}</div>
             : <div className="result-empty">처리 완료 후 표시됩니다.</div>
       )}
 

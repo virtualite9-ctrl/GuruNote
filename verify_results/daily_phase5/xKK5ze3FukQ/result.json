@@ -1,0 +1,36 @@
+{
+ "url": "https://youtu.be/xKK5ze3FukQ",
+ "video_id": "xKK5ze3FukQ",
+ "title": "How does Atlas learn? | Inside the Lab | Boston Dynamics",
+ "duration": 343.0,
+ "segments": 49,
+ "speakers_stt": {
+  "A": 14,
+  "B": 11,
+  "E": 1,
+  "D": 14,
+  "C": 9
+ },
+ "speakers_body": {
+  "화자 4": 14,
+  "알베르토 로드리게스": 13,
+  "셰인 로젠레비": 10,
+  "비나이 카미디": 8,
+  "알베르토 로드리게스(Alberto Rodriguez)": 1,
+  "셰인 로젠레비(Shane Rozen-Levy)": 1,
+  "화자 5": 1,
+  "비나이 카미디(Vinay Kamidi)": 1
+ },
+ "stt_elapsed": 34.48706316947937,
+ "trans_elapsed": 72.20294117927551,
+ "body_lines": 96,
+ "cjk_chars": 0,
+ "segment_resplit_flag": true,
+ "total_chunks": 5,
+ "match_exact": 4,
+ "match_less": 1,
+ "match_extreme": 1,
+ "timeouts": 0,
+ "length_mismatch": 0,
+ "empty_recoveries": 0
+}

@@ -59,7 +59,14 @@ _KNOWN_SETTINGS: tuple[str, ...] = (
     "ASSEMBLYAI_API_KEY",
     # Integrations (Obsidian, Notion)
     "OBSIDIAN_VAULT_PATH", "OBSIDIAN_SUBFOLDER",
+    # 작업 완료 후 Obsidian 자동 내보내기 — "1"=on / 그 외=off (기본 꺼짐).
+    # React onResult 가 이 값을 읽어 send_obsidian 자동 호출 (백엔드 파이프라인 무변).
+    "GURUNOTE_OBSIDIAN_AUTOEXPORT",
     "NOTION_TOKEN", "NOTION_PARENT_ID", "NOTION_PARENT_TYPE",
+    # Processing options (불리언 토글 — "1"=on / "0"=off, 미설정 시 백엔드 default on).
+    # llm.py:2811(GURUNOTE_TWO_PASS) / stt_mlx.py(GURUNOTE_SEGMENT_RESPLIT) 가
+    # os.environ 을 읽으므로 키 추가만으로 저장/로드/반영 (백엔드 로직 무변).
+    "GURUNOTE_TWO_PASS", "GURUNOTE_SEGMENT_RESPLIT",
 )
 
 _SECRET_KEYS: frozenset[str] = frozenset({
@@ -201,6 +208,71 @@ def _parse_frontmatter(markdown: str) -> dict:
         key, raw_val = m.group(1), m.group(2)
         out[key] = _strip_yaml_value(raw_val)
     return out
+
+
+def _obsidian_note_stem(title: str) -> str:
+    """Obsidian 노트 파일명 stem (확장자 제외) — 작업물 제목만으로 구성.
+
+    send_obsidian 의 저장 파일명과 wikilink 대상이 모두 이 helper 를 거치므로,
+    파일명과 링크 stem 이 항상 일치한다 (그래프 연결 보장). 출처 구분은 파일명
+    접두사 대신 frontmatter ``gurunote_job_id`` 표식 + 하위 폴더(``Gurunote/``)가
+    담당하므로 접두사를 붙이지 않는다."""
+    from gurunote.exporter import sanitize_filename  # noqa: PLC0415
+    return sanitize_filename(title)
+
+
+def _inject_frontmatter_field(md: str, key: str, value: str) -> str:
+    """frontmatter 닫는 ``---`` 직전에 ``key: "value"`` 한 줄을 삽입.
+
+    이미 같은 key 가 있으면 중복 삽입하지 않는다 (재내보내기 대비). frontmatter 가
+    없으면 원본 그대로 반환. ``_inject_related_notes`` 와 같은 정규식 패턴 — 기존
+    필드는 보존하고 vault 사본에만 적용된다.
+    """
+    fm_match = re.match(r"^(---\n.*?\n)(---\n)", md, re.DOTALL)
+    if not fm_match:
+        return md
+    head, close = fm_match.group(1), fm_match.group(2)
+    if re.search(rf"^{re.escape(key)}:", head, re.MULTILINE):
+        return md
+    line = f'{key}: "{value}"\n'
+    return head + line + close + md[fm_match.end():]
+
+
+def _inject_related_notes(md: str, related: list) -> str:
+    """vault 로 내보낼 마크다운에 RAG 유사 노트를 wikilink 로 삽입.
+
+    - 본문 끝 ``## 연관 노트`` 섹션: ``- [[stem|제목]] (78%)`` (Obsidian 읽기뷰에서
+      "제목 (78%)" 로 보이고, 상대 노트가 vault 에 있으면 그래프로 연결).
+    - frontmatter ``related: ["[[stem]]", …]`` (Dataview / 그래프용).
+
+    ``related`` 가 비면 원본 그대로 반환 (RAG 미설치/인덱스 없음/유사 노트 없음 시
+    내보내기가 깨지지 않게). 저장된 result.md 는 손대지 않고 vault 사본만 수정한다.
+    """
+    if not related:
+        return md
+
+    body_lines = ["", "## 연관 노트", ""]
+    fm_links = []
+    for r in related:
+        t = (r.get("title") or r.get("job_id") or "").strip()
+        if not t:
+            continue
+        stem = _obsidian_note_stem(t)
+        pct = round((r.get("score") or 0) * 100)
+        body_lines.append(f"- [[{stem}|{t}]] ({pct}%)")
+        fm_links.append(f'"[[{stem}]]"')
+    if len(body_lines) <= 3:  # 유효 항목 없음
+        return md
+    body_section = "\n".join(body_lines) + "\n"
+
+    # frontmatter 닫는 --- 직전에 related: 한 줄 삽입 (기존 필드 보존).
+    fm_match = re.match(r"^(---\n.*?\n)(---\n)", md, re.DOTALL)
+    if fm_match and fm_links:
+        head, close = fm_match.group(1), fm_match.group(2)
+        related_line = f"related: [{', '.join(fm_links)}]\n"
+        md = head + related_line + close + md[fm_match.end():]
+
+    return md.rstrip() + "\n" + body_section
 
 
 class Api:
@@ -434,6 +506,71 @@ class Api:
             return self._err(
                 "SETTINGS_LOAD_FAILED", f"{type(exc).__name__}: {exc}"
             )
+
+    # ----- 통용 표기 dict (canonical_names.json — .env 와 무관) -----------------
+    # 인명·회사명 한국어 표기 교정 dict. 구조 {English: {auto, user}}.
+    # 파일 I/O 는 llm.py 의 _load/_save 재사용 (단일 출처). get_settings/.env 와 별개.
+
+    def get_canonical_names(self) -> dict:
+        """통용 표기 dict 반환 — ``{English: {"auto": str, "user": str}}``."""
+        try:
+            from gurunote.llm import _load_canonical_names  # noqa: PLC0415
+            return {"ok": True, "names": _load_canonical_names()}
+        except Exception as exc:  # noqa: BLE001
+            return self._err("CANONICAL_LOAD_FAILED", f"{type(exc).__name__}: {exc}")
+
+    def save_canonical_names(self, payload: Any = None) -> dict:
+        """통용 표기 dict 저장. payload = ``{English: {auto, user}}`` (또는 값이 str 이면
+        user 로 간주). 빈 항목 제외 + atomic write 는 ``_save_canonical_names`` 가 처리.
+        저장 후 정규화된 dict 를 다시 반환 (UI 재로드용)."""
+        if not isinstance(payload, dict):
+            return self._err("INVALID_NAMES", f"payload must be dict, got {type(payload).__name__}")
+        clean: dict = {}
+        for k, v in payload.items():
+            eng = str(k).strip()
+            if not eng:
+                continue
+            if isinstance(v, dict):
+                clean[eng] = {
+                    "auto": str(v.get("auto") or "").strip(),
+                    "user": str(v.get("user") or "").strip(),
+                }
+            else:
+                clean[eng] = {"auto": "", "user": str(v or "").strip()}
+        try:
+            from gurunote.llm import _load_canonical_names, _save_canonical_names  # noqa: PLC0415
+            _save_canonical_names(clean)
+            return {"ok": True, "names": _load_canonical_names()}
+        except Exception as exc:  # noqa: BLE001
+            return self._err("CANONICAL_SAVE_FAILED", f"{type(exc).__name__}: {exc}")
+
+    def refresh_job_canonical(self, job_id: Any = None) -> dict:
+        """기존 노트의 통용 표기 새로고침 (A-2 ③) — auto 표기를 user 표기로 텍스트 치환.
+
+        번역 재실행 없이 완성된 result.md 의 문자열만 교체 (auto·user 둘 다 있는 항목).
+        ``get_job_markdown`` → ``refresh_canonical_in_markdown`` → ``update_job_markdown``.
+        변경 0 이면 저장 생략. 갱신된 markdown 을 함께 반환 (UI 재렌더용)."""
+        if isinstance(job_id, dict):
+            job_id = job_id.get("job_id")
+        if not isinstance(job_id, str) or not job_id:
+            return self._err("INVALID_ID", "job_id must be a non-empty string")
+        if "/" in job_id or "\\" in job_id or ".." in job_id:
+            return self._err("INVALID_ID", "job_id contains path separators")
+        try:
+            from gurunote.history import get_job_markdown, update_job_markdown  # noqa: PLC0415
+            from gurunote.llm import (  # noqa: PLC0415
+                _load_canonical_names,
+                refresh_canonical_in_markdown,
+            )
+            md = get_job_markdown(job_id)
+            if md is None:
+                return self._err("HISTORY_NOT_FOUND", f"no result.md for job {job_id}")
+            new_md, changed = refresh_canonical_in_markdown(md, _load_canonical_names())
+            if changed and new_md != md:
+                update_job_markdown(job_id, new_md)
+            return {"ok": True, "changed": changed, "markdown": new_md}
+        except Exception as exc:  # noqa: BLE001
+            return self._err("CANONICAL_REFRESH_FAILED", f"{type(exc).__name__}: {exc}")
 
     def save_settings(self, patch: dict) -> dict:
         """Persist a partial settings patch via gurunote.settings.save_settings.
@@ -988,13 +1125,121 @@ class Api:
         try:
             from gurunote.history import delete_job  # noqa: PLC0415
             delete_job(job_id)
-            return {"ok": True, "job_id": job_id}
         except Exception as exc:  # noqa: BLE001
             return self._err("DELETE_FAILED", f"{type(exc).__name__}: {exc}")
 
+        # best-effort: Obsidian vault 사본 삭제 (gurunote_job_id 표식 매칭).
+        # 라이브러리 삭제는 이미 성공 — vault 삭제 실패는 막지 않고 결과에만 기록.
+        result = {"ok": True, "job_id": job_id, "vault_deleted": 0}
+        try:
+            from gurunote.obsidian import delete_from_vault  # noqa: PLC0415
+            result["vault_deleted"] = len(delete_from_vault(job_id))
+        except Exception as exc:  # noqa: BLE001
+            result["vault_error"] = f"{type(exc).__name__}: {exc}"
+        return result
+
+    def has_vault_copy(self, job_id: Any = None) -> dict:
+        """삭제 확인 다이얼로그용 — vault 에 이 job 의 표식 사본이 있는지.
+
+        ``{ok, has_copy: bool, count: int}``. 확인 실패 시 has_copy=False (안내만 생략).
+        """
+        if isinstance(job_id, dict):
+            job_id = job_id.get("job_id")
+        if not isinstance(job_id, str) or not job_id:
+            return {"ok": True, "has_copy": False, "count": 0}
+        try:
+            from gurunote.obsidian import find_vault_copies  # noqa: PLC0415
+            n = len(find_vault_copies(job_id))
+        except Exception:  # noqa: BLE001
+            n = 0
+        return {"ok": True, "has_copy": n > 0, "count": n}
+
+    # ----- semantic search (의미 검색 / RAG) — gurunote.semantic 재사용 ------
+    # semantic.py 는 sentence-transformers 임베딩 + 코사인 유사도로 이미 완성돼
+    # 있다 (옛 gui.py/app.py 에서 동작). 여기서는 호출만 — 로직 변경 없음.
+    # 선택 의존성 (requirements-search.txt) 미설치 시 is_available() False.
+
+    def semantic_available(self) -> dict:
+        """의미 검색 의존성 설치 여부 + 인덱스 빌드 여부. Dashboard 카드용."""
+        from gurunote import semantic  # noqa: PLC0415
+        return {
+            "ok": True,
+            "available": semantic.is_available(),
+            "built": semantic.is_index_built(),
+            "hint": semantic.missing_packages_hint(),
+        }
+
+    def semantic_index_stats(self) -> dict:
+        """현재 인덱스 요약 (모델 / chunk 수 / 작업 수 / 빌드 시각)."""
+        from gurunote import semantic  # noqa: PLC0415
+        stats = semantic.index_stats()  # {"built": False} 또는 {"built": True, ...}
+        return {"ok": True, "available": semantic.is_available(), **stats}
+
     def rebuild_index(self) -> dict:
-        """Rebuild the semantic index. Long-running → returns job_id."""
-        raise NotImplementedError("rebuild_index: wired in Phase 2")
+        """저장된 전체 작업으로 의미 검색 인덱스를 (재)빌드한다.
+
+        블로킹 호출 — pywebview 가 JS→Python 호출을 워커 스레드에 dispatch 하므로
+        모델이 임베딩하는 동안 UI 는 멈추지 않는다 (save_result_as 와 동일 패턴).
+        첫 실행 시 임베딩 모델 (~117MB) 을 다운로드한다. 빌드 요약 + 갱신된
+        통계를 반환.
+        """
+        from gurunote import semantic  # noqa: PLC0415
+        from gurunote.history import load_index  # noqa: PLC0415
+        if not semantic.is_available():
+            return self._err("SEMANTIC_UNAVAILABLE", semantic.missing_packages_hint())
+        try:
+            jobs = load_index()
+            result = semantic.build_index(jobs)
+        except RuntimeError as exc:
+            return self._err("REBUILD_FAILED", str(exc))
+        except Exception as exc:  # noqa: BLE001 — encode/IO 오류 정규화
+            return self._err("REBUILD_FAILED", f"{type(exc).__name__}: {exc}")
+        return {"ok": True, **result, "stats": semantic.index_stats()}
+
+    def semantic_search(self, payload: Any = None, *, query: Optional[str] = None,
+                        job_id: Optional[str] = None, top_k: int = 10) -> dict:
+        """의미 유사도 검색. 두 진입점:
+
+          - "의미 검색" 칩: ``api.semantic_search({query})`` — 자유 텍스트 쿼리.
+          - "연관 노트" 버튼: ``api.semantic_search({job_id})`` — 해당 노트 본문을
+            쿼리로 쓰고 자기 자신은 결과에서 제외.
+        """
+        from gurunote import semantic  # noqa: PLC0415
+        if isinstance(payload, dict):
+            query = payload.get("query", query)
+            job_id = payload.get("job_id", job_id)
+            top_k = payload.get("top_k", top_k)
+        elif isinstance(payload, str):
+            query = payload
+
+        if not semantic.is_available():
+            return self._err("SEMANTIC_UNAVAILABLE", semantic.missing_packages_hint())
+        if not semantic.is_index_built():
+            return self._err(
+                "INDEX_NOT_BUILT",
+                "의미 검색 인덱스가 없습니다. 대시보드에서 'Semantic Rebuild' 를 먼저 실행하세요.",
+            )
+
+        # 연관 노트: 노트 본문을 쿼리로 사용.
+        if job_id and not query:
+            from gurunote.history import get_job_markdown  # noqa: PLC0415
+            md = get_job_markdown(job_id)
+            if not md:
+                return self._err("HISTORY_NOT_FOUND", f"no result.md for job {job_id}")
+            query = md
+        if not isinstance(query, str) or not query.strip():
+            return self._err("INVALID_QUERY", "query must be a non-empty string")
+
+        try:
+            k = int(top_k) + (1 if job_id else 0)  # 자기 제외 보정
+            results = semantic.search(query, top_k=k)
+        except RuntimeError as exc:
+            return self._err("SEARCH_FAILED", str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return self._err("SEARCH_FAILED", f"{type(exc).__name__}: {exc}")
+        if job_id:
+            results = [r for r in results if r.get("job_id") != job_id][: int(top_k)]
+        return {"ok": True, "results": results}
 
     # ============================================================ note edit (TODO)
 
@@ -1131,8 +1376,85 @@ class Api:
     def save_pdf(self, job_id: str, target_path: Optional[str] = None) -> dict:
         raise NotImplementedError("save_pdf: wired in Phase 2-B")
 
-    def send_obsidian(self, job_id: str) -> dict:
-        raise NotImplementedError("send_obsidian: wired in Phase 2-B")
+    def send_obsidian(self, job_id: Any = None, skip_if_exists: Any = False) -> dict:
+        """저장된 노트를 Obsidian vault 로 내보낸다 (RAG 유사 노트 wikilink 포함).
+
+        흐름: result.md 로드 → 의미 검색(설치+인덱스 시)으로 유사 노트 top5(≥0.5)
+        → ``## 연관 노트`` 섹션 + frontmatter ``related`` wikilink 삽입
+        → ``obsidian.save_to_vault`` (OBSIDIAN_VAULT_PATH). obsidian.py / semantic.py
+        로직은 호출만 — 변경 없음. vault 사본만 수정, 저장된 result.md 는 불변.
+
+        Vault 미설정 시 ``code=NO_VAULT`` 로 안내 (Settings → Obsidian 으로 유도).
+        RAG 미설치/인덱스 없음/유사 노트 없음이면 연관 노트 없이 그대로 내보낸다.
+        """
+        from gurunote import obsidian, semantic  # noqa: PLC0415
+        from gurunote.history import get_job_markdown, load_index  # noqa: PLC0415
+
+        if isinstance(job_id, dict):
+            skip_if_exists = job_id.get("skip_if_exists", skip_if_exists)
+            job_id = job_id.get("job_id")
+        skip_if_exists = bool(skip_if_exists)
+        if not isinstance(job_id, str) or not job_id:
+            return self._err("INVALID_ID", "job_id must be a non-empty string")
+        if "/" in job_id or "\\" in job_id or ".." in job_id:
+            return self._err("INVALID_ID", "job_id contains path separators")
+
+        md = get_job_markdown(job_id)
+        if md is None:
+            return self._err("HISTORY_NOT_FOUND", f"no result.md for job {job_id}")
+
+        # 자동 내보내기(skip_if_exists)에서만: 같은 job_id 표식 노트가 vault 에 이미
+        #   있으면 건너뛴다. 같은 영상 재처리 시 vault 사본 누적을 막는다. 수동 버튼은
+        #   플래그를 보내지 않아 항상 새로 저장. find_vault_copies 는 읽기 전용이며
+        #   vault 미설정 시 빈 목록 → 건너뛰지 않고 아래 NO_VAULT 흐름으로 이어진다.
+        if skip_if_exists:
+            existing = obsidian.find_vault_copies(job_id)
+            if existing:
+                return {
+                    "ok": True,
+                    "skipped": True,
+                    "path": str(existing[0]),
+                    "related_count": 0,
+                }
+
+        meta = next((e for e in load_index() if e.get("job_id") == job_id), {})
+        title = meta.get("organized_title") or meta.get("title") or job_id
+
+        # RAG 유사 노트 (best-effort — 실패해도 내보내기는 진행).
+        related: list = []
+        if semantic.is_available() and semantic.is_index_built():
+            try:
+                hits = semantic.search(md, top_k=6, min_score=0.5)
+                related = [h for h in hits if h.get("job_id") != job_id][:5]
+            except Exception:  # noqa: BLE001 — 검색 실패는 내보내기를 막지 않음
+                related = []
+
+        md_out = _inject_related_notes(md, related)
+        # 라이브러리 삭제 시 vault 사본 동기화용 표식 (vault 사본에만, result.md 불변).
+        md_out = _inject_frontmatter_field(md_out, "gurunote_job_id", job_id)
+
+        # Vault 경로 확인 (미설정 → 안내).
+        vault = obsidian.resolve_vault_path()
+        if vault is None:
+            return self._err(
+                "NO_VAULT",
+                "Obsidian Vault 경로가 설정되지 않았습니다. 설정 → Obsidian 에서 지정하세요.",
+            )
+
+        try:
+            out = obsidian.save_to_vault(
+                md_out, filename=f"{_obsidian_note_stem(title)}.md",
+            )
+        except (RuntimeError, ValueError) as exc:
+            return self._err("OBSIDIAN_FAILED", str(exc))
+        except OSError as exc:
+            return self._err("OBSIDIAN_FAILED", f"{type(exc).__name__}: {exc}")
+        return {
+            "ok": True,
+            "path": str(out),
+            "vault": str(vault),
+            "related_count": len(related),
+        }
 
     def send_notion(self, job_id: str) -> dict:
         """Long-running → returns job_id; result via ``notion_progress`` event."""
@@ -1144,6 +1466,35 @@ class Api:
         raise NotImplementedError("check_update: wired in Phase 4-B")
 
     # ============================================================ misc
+
+    def open_external(self, url: Any = None) -> dict:
+        """Open ``url`` in the user's default system browser (not in-app).
+
+        pywebview renders links inside the app webview by default, which would
+        replace the GuruNote UI. The History detail "출처" link calls this so
+        the source video opens in the real browser instead.
+
+        Accepts ``api.open_external("https://…")`` and ``api.open_external({url})``
+        (pywebview marshals a JS object as a single positional dict). Only
+        ``http``/``https`` URLs are honored — other schemes (``file:``,
+        ``javascript:``, …) are rejected to avoid local-path / scheme injection.
+        """
+        import webbrowser  # noqa: PLC0415
+
+        if isinstance(url, dict):
+            url = url.get("url")
+        if not isinstance(url, str) or not url.strip():
+            return self._err("INVALID_URL", "url must be a non-empty string")
+        url = url.strip()
+        if not (url.startswith("http://") or url.startswith("https://")):
+            return self._err("INVALID_URL", "only http(s) URLs are allowed")
+        try:
+            opened = webbrowser.open(url)
+        except Exception as exc:  # noqa: BLE001 — browser launch errors are opaque
+            return self._err("OPEN_FAILED", f"{type(exc).__name__}: {exc}")
+        if not opened:
+            return self._err("OPEN_FAILED", "no browser available")
+        return {"ok": True, "url": url}
 
     def show_message(self, title: str, body: str, kind: str = "info") -> dict:
         """Show a simple modal. ``kind`` ∈ {info, warning, error}.

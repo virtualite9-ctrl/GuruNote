@@ -18,6 +18,7 @@ const SETTINGS_NAV_ITEMS = [
   { id: 'stt',       icon: 'mic',       label: 'STT 엔진' },
   { id: 'obsidian',  icon: 'hub',       label: 'Obsidian' },
   { id: 'notion',    icon: 'cloud',     label: 'Notion' },
+  { id: 'canonical', icon: 'spellcheck', label: '통용 표기' },
   { id: 'advanced',  icon: 'tune',      label: '고급' },
   { id: 'about',     icon: 'info',      label: 'GuruNote 정보' },
 ];
@@ -50,6 +51,48 @@ function SecretInput({ value, onChange, isSet, placeholder, mono }) {
         title={shown ? '숨기기' : '보기'}
       >
         <span className="msi">{shown ? 'visibility_off' : 'visibility'}</span>
+      </button>
+    </div>
+  );
+}
+
+/* === SettingsSwitch — 불리언 on/off 스위치 (재사용) ===
+   Babel standalone 전역 노출 — 다른 컴포넌트 파일과 충돌 회피 위해 Settings 접두사.
+   inline 스타일로 CSS 파일 무변경 (--gn-* 토큰 + fallback). */
+function SettingsSwitch({ label, hint, checked, onChange, disabled }) {
+  return (
+    <div
+      className="settings-switch-row"
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '10px 0' }}
+    >
+      <div>
+        <div style={{ fontSize: 14, color: 'var(--gn-on-surface, inherit)' }}>{label}</div>
+        {hint && (
+          <div style={{ fontSize: 12, color: 'var(--gn-on-surface-muted, #888)', marginTop: 2 }}>{hint}</div>
+        )}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
+        onClick={() => !disabled && onChange(!checked)}
+        style={{
+          width: 42, height: 24, borderRadius: 12, border: 'none', padding: 0,
+          flexShrink: 0, cursor: disabled ? 'default' : 'pointer',
+          opacity: disabled ? 0.5 : 1, position: 'relative',
+          background: checked ? 'var(--gn-primary, #3b82f6)' : 'var(--gn-surface-3, #5a5a5a)',
+          transition: 'background 0.15s',
+        }}
+      >
+        <span
+          style={{
+            position: 'absolute', top: 2, left: checked ? 20 : 2,
+            width: 20, height: 20, borderRadius: '50%', background: '#fff',
+            transition: 'left 0.15s',
+          }}
+        />
       </button>
     </div>
   );
@@ -460,6 +503,16 @@ function SettingsObsidian({ values, secretsSet, onChange, onSave, dirty }) {
         />
       </Field>
 
+      {/* 자동 내보내기 (B16-2) — 기본 꺼짐: "1" 일 때만 on */}
+      <div className="settings-group" style={{ marginTop: 'var(--sp-3)' }}>
+        <SettingsSwitch
+          label="작업 완료 후 자동 내보내기"
+          hint="노트 생성이 끝나면 자동으로 이 Vault 에 내보냅니다 (RAG 인덱스 있으면 연관 노트 wikilink 포함). Vault 경로 설정 필요."
+          checked={values.GURUNOTE_OBSIDIAN_AUTOEXPORT === '1'}
+          onChange={(on) => onChange('GURUNOTE_OBSIDIAN_AUTOEXPORT', on ? '1' : '0')}
+        />
+      </div>
+
       {/* Action bar */}
       <div className="settings-actions">
         <div className="settings-actions__spacer" />
@@ -552,6 +605,179 @@ function SettingsNotion({ values, secretsSet, onChange, onSave, dirty }) {
 }
 
 /* === Advanced Section === */
+/* === 통용 표기 편집 (A-2 ②) — canonical_names.json (.env 와 별개 state) ===
+   GuruNote 가 자동 채운 auto(읽기 전용) + 사용자 수정 user(편집). user 우선 적용.
+   자체 state·자체 저장 (get/save_canonical_names) — 설정 .env dirty 흐름과 무관. */
+function SettingsCanonicalNames() {
+  const [rows, setRows] = useState([]);   // [{english, auto, user}]
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState('');  // 검색 — 영문/auto/user 부분 일치
+
+  const _rowsFromNames = (names) =>
+    Object.keys(names || {}).sort().map((eng) => ({
+      english: eng,
+      auto: names[eng]?.auto || '',
+      user: names[eng]?.user || '',
+    }));
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        while (!window.pywebview?.api && !cancelled) {
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        if (cancelled) return;
+        const r = await window.pywebview.api.get_canonical_names();
+        if (!cancelled && r?.ok) setRows(_rowsFromNames(r.names));
+      } catch (e) {
+        /* 로드 실패 — 빈 목록 */
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const updateRow = (i, field, val) =>
+    setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [field]: val } : r)));
+  const removeRow = (i) => setRows((rs) => rs.filter((_, idx) => idx !== i));
+  // 새 빈 행을 목록 맨 앞에 넣어 추가 직후 스크롤 없이 바로 입력할 수 있게 한다.
+  //   (렌더는 rows 배열 순서 그대로 — 정렬 강제 부재. 알파벳 정렬은 저장 시 _rowsFromNames 가
+  //    다시 적용.) 검색 활성 시 빈 행은 필터에 안 걸려 안 보이므로 검색어도 함께 비운다.
+  const addRow = () => { setQuery(''); setRows((rs) => [{ english: '', auto: '', user: '' }, ...rs]); };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const mapping = {};
+    for (const r of rows) {
+      const eng = (r.english || '').trim();
+      if (!eng) continue;
+      mapping[eng] = { auto: (r.auto || '').trim(), user: (r.user || '').trim() };
+    }
+    try {
+      const res = await window.pywebview.api.save_canonical_names(mapping);
+      if (res?.ok) {
+        window.showToast?.('통용 표기 저장됨 — 다음 작업부터 적용', 'success');
+        setRows(_rowsFromNames(res.names));
+      } else {
+        window.showToast?.(`저장 실패: ${res?.error || '알 수 없는 오류'}`, 'error');
+      }
+    } catch (e) {
+      window.showToast?.(`저장 오류: ${e.message || e}`, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 검색 — 원본 인덱스(i)를 보존해야 updateRow/removeRow 가 맞는 행에 적용된다.
+  //   단순 filter 하면 필터된 목록의 i 가 원본 rows 의 i 와 어긋나 다른 행을 망가뜨림.
+  const q = query.trim().toLowerCase();
+  const indexedRows = rows.map((r, i) => ({ r, i }));
+  const visibleRows = q
+    ? indexedRows.filter(({ r }) =>
+        (r.english || '').toLowerCase().includes(q)
+        || (r.auto || '').toLowerCase().includes(q)
+        || (r.user || '').toLowerCase().includes(q))
+    : indexedRows;
+
+  return (
+    <>
+      <div className="settings-content__header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+          <div className="settings-section-icon">
+            <span className="msi">spellcheck</span>
+          </div>
+          <div>
+            <div className="settings-content__title">통용 표기</div>
+            <div className="settings-content__sub">인명·회사명 한국어 표기 — auto 확인 + user 수정 (다음 작업부터 적용)</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-group">
+      <div className="settings-group__sub">
+        GuruNote 가 자동으로 채운 표기(auto)를 확인하고, 틀리면 수정 표기(user)에 올바른 한국어를
+        입력하세요. 수정한 표기가 우선 적용됩니다 (다음 작업부터).
+      </div>
+      {!loading && rows.length > 0 && (
+        <input
+          type="text"
+          className="settings-field__input"
+          placeholder="검색 (영문·표기)"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          style={{ marginBottom: 10 }}
+        />
+      )}
+      {loading ? (
+        <div style={{ fontSize: 13, color: 'var(--gn-on-surface-muted)' }}>불러오는 중…</div>
+      ) : (
+        <>
+          {rows.length === 0 && (
+            <div style={{ fontSize: 13, color: 'var(--gn-on-surface-muted)', padding: '6px 0' }}>
+              아직 기록된 표기가 없습니다. 작업을 실행하면 자동으로 채워집니다.
+            </div>
+          )}
+          {rows.length > 0 && visibleRows.length === 0 && (
+            <div style={{ fontSize: 13, color: 'var(--gn-on-surface-muted)', padding: '6px 0' }}>
+              검색 결과가 없습니다.
+            </div>
+          )}
+          {visibleRows.map(({ r, i }) => (
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+              <input
+                type="text"
+                className="settings-field__input settings-field__input--mono"
+                placeholder="English"
+                value={r.english}
+                onChange={(e) => updateRow(i, 'english', e.target.value)}
+                style={{ flex: 1.4 }}
+              />
+              <input
+                type="text"
+                className="settings-field__input"
+                value={r.auto}
+                readOnly
+                placeholder="(auto)"
+                title="GuruNote 자동 표기 (읽기 전용)"
+                style={{ flex: 1, color: 'var(--gn-on-surface-muted, #888)' }}
+              />
+              <input
+                type="text"
+                className="settings-field__input"
+                placeholder="수정 표기 (user)"
+                value={r.user}
+                onChange={(e) => updateRow(i, 'user', e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => removeRow(i)}
+                title="삭제"
+                style={{ flexShrink: 0 }}
+              >
+                <span className="msi">delete</span>
+              </button>
+            </div>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+            <button type="button" className="btn btn--ghost" onClick={addRow}>
+              <span className="msi">add</span> 추가
+            </button>
+            <button type="button" className="btn btn--primary" onClick={handleSave} disabled={saving}>
+              <span className="msi">save</span> {saving ? '저장 중…' : '통용 표기 저장'}
+            </button>
+          </div>
+        </>
+      )}
+      </div>
+    </>
+  );
+}
+
 function SettingsAdvanced({ values, secretsSet, onChange, onSave, dirty }) {
   return (
     <>
@@ -562,9 +788,27 @@ function SettingsAdvanced({ values, secretsSet, onChange, onSave, dirty }) {
           </div>
           <div>
             <div className="settings-content__title">고급</div>
-            <div className="settings-content__sub">전문가용 설정 — 다른 LLM provider 키 + WhisperX (NVIDIA)</div>
+            <div className="settings-content__sub">처리 옵션 + 다른 LLM provider 키 + WhisperX (NVIDIA)</div>
           </div>
         </div>
+      </div>
+
+      {/* === 처리 옵션 (토글) === */}
+      <div className="settings-group">
+        <div className="settings-group__title">처리 옵션</div>
+        <div className="settings-group__sub">번역 품질 / 처리 시간 trade-off. 둘 다 기본 켜짐 — 끄면 기존보다 빠르지만 품질이 낮아질 수 있습니다.</div>
+        <SettingsSwitch
+          label="2-pass 번역"
+          hint="자유 번역 후 정렬하는 2단계 방식 — 정확도·정합 향상, 처리 시간 증가. 끄면 1-pass."
+          checked={(values.GURUNOTE_TWO_PASS ?? '') !== '0'}
+          onChange={(on) => onChange('GURUNOTE_TWO_PASS', on ? '1' : '0')}
+        />
+        <SettingsSwitch
+          label="STT 의미 단위 재분할"
+          hint="음성 인식 결과를 의미 단위로 다시 나눠 가독성·화자 정합을 높입니다. 끄면 원본 세그먼트 사용."
+          checked={(values.GURUNOTE_SEGMENT_RESPLIT ?? '') !== '0'}
+          onChange={(on) => onChange('GURUNOTE_SEGMENT_RESPLIT', on ? '1' : '0')}
+        />
       </div>
 
       {/* === Anthropic === */}
@@ -718,7 +962,7 @@ function SettingsAbout() {
         </div>
         <div className="settings-about__name">GuruNote</div>
         <div className="settings-about__version">
-          v{appInfo?.version || '1.0.0.2'}
+          v{appInfo?.version || '1.0.0.28'}
         </div>
         <div className="settings-about__desc">
           유튜브 링크 한 줄로 한국어 요약본을 생성합니다.
@@ -917,6 +1161,9 @@ function SettingsScreen() {
               onSave={handleSave}
               dirty={dirtyCount}
             />
+          )}
+          {activeNav === 'canonical' && (
+            <SettingsCanonicalNames />
           )}
           {activeNav === 'advanced' && (
             <SettingsAdvanced

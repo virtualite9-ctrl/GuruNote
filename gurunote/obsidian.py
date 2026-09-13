@@ -18,6 +18,7 @@ Phase A 의 YAML frontmatter 가 이미 Obsidian 호환 형식 (title / tags / f
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -241,3 +242,75 @@ def save_to_vault(
 
     out_path.write_text(full_md, encoding="utf-8")
     return out_path
+
+
+# =============================================================================
+# Vault 사본 찾기 / 삭제 — 라이브러리 삭제 시 동기화 (표식 기반)
+# =============================================================================
+# send_obsidian 이 내보낼 때 frontmatter 에 `gurunote_job_id` 표식을 남긴다.
+# 라이브러리에서 노트를 지우면 그 표식이 일치하는 vault 사본만 삭제한다.
+# 표식이 없는 (예전에 내보낸) 파일은 매칭되지 않아 건드리지 않는다.
+_JOB_ID_FM_RE = re.compile(r'^gurunote_job_id:\s*"?([^"\n]+?)"?\s*$', re.MULTILINE)
+
+
+def _read_frontmatter_job_id(md_head: str) -> Optional[str]:
+    """마크다운 머리에서 frontmatter `gurunote_job_id` 값 추출. 없으면 None.
+
+    frontmatter 블록(`--- … ---`) 안만 본다 — 본문에 같은 토큰이 있어도 오탐 회피.
+    """
+    block_match = re.match(r"^---\n(.*?)\n---\n", md_head, re.DOTALL)
+    block = block_match.group(1) if block_match else ""
+    if not block:
+        return None
+    m = _JOB_ID_FM_RE.search(block)
+    return m.group(1).strip() if m else None
+
+
+def find_vault_copies(
+    job_id: str,
+    vault_path: Optional[Path] = None,
+    subfolder: Optional[str] = None,
+) -> list[Path]:
+    """vault 하위 폴더의 `.md` 중 frontmatter `gurunote_job_id` 가 일치하는 파일 목록.
+
+    파일을 삭제하지 않는다 (확인 / dry-run 용). vault 미설정·표식 파일 없음 → 빈 목록.
+    """
+    if not job_id:
+        return []
+    if vault_path is None:
+        vault_path = resolve_vault_path()
+    if vault_path is None or not vault_path.is_dir():
+        return []
+    sf = resolve_subfolder() if subfolder is None else subfolder
+    target_dir = vault_path / sf if sf else vault_path
+    if not target_dir.is_dir():
+        return []
+
+    matches: list[Path] = []
+    for p in sorted(target_dir.glob("*.md")):
+        try:
+            head = p.read_text(encoding="utf-8")[:4096]  # frontmatter 만 보면 충분
+        except OSError:
+            continue
+        if _read_frontmatter_job_id(head) == job_id:
+            matches.append(p)
+    return matches
+
+
+def delete_from_vault(
+    job_id: str,
+    vault_path: Optional[Path] = None,
+    subfolder: Optional[str] = None,
+) -> list[Path]:
+    """`find_vault_copies` 가 찾은 표식 일치 파일을 삭제. 삭제한 경로 목록 반환.
+
+    표식 없는 파일은 매칭되지 않으므로 절대 삭제되지 않는다.
+    """
+    deleted: list[Path] = []
+    for p in find_vault_copies(job_id, vault_path, subfolder):
+        try:
+            p.unlink()
+            deleted.append(p)
+        except OSError:
+            pass
+    return deleted
