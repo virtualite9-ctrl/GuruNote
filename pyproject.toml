@@ -23,6 +23,9 @@ dev = [
     # 모킹한다. 실제 호출은 하지 않지만 patch 대상 문자열을 해석하려면 모듈이
     # import 가능해야 하므로 test 의존성이다.
     "openai>=1.30",
+    # gurunote.audio 가 모듈 레벨에서 yt_dlp 를 import 하고,
+    # gurunote.pipeline_worker 가 그 모듈을 끌어온다. import 검사에 필요하다.
+    "yt-dlp>=2024.3.10",
 ]
 
 # pytest 설정은 pytest.ini 가 source-of-truth (중복 방지).

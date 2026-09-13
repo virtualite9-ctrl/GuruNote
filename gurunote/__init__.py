@@ -6,4 +6,4 @@ GuruNote: 해외 IT/AI 구루들의 유튜브 인터뷰/팟캐스트를
 from gurunote.types import Segment, Transcript
 
 __all__ = ["Segment", "Transcript"]
-__version__ = "1.0.0.1"
+__version__ = "1.0.0.2"
