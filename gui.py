@@ -39,6 +39,7 @@ from gurunote.audio import (
 )
 from gurunote.exporter import sanitize_filename
 from gurunote.llm import LLMConfig, test_connection
+from gurunote.options import LLM_PROVIDERS, STT_ENGINES
 from gurunote.settings import save_settings
 from gurunote.history import (
     delete_job, get_job_log, get_job_markdown,
@@ -127,8 +128,9 @@ APP_TITLE = "GuruNote"
 WINDOW_WIDTH = 1200
 WINDOW_HEIGHT = 820
 
-STT_OPTIONS = ["auto", "whisperx", "mlx", "assemblyai"]
-LLM_OPTIONS = ["openai", "openai_compatible", "anthropic", "gemini"]
+# 선택지 정본은 gurunote/options.py. 진입점마다 복사하지 않는다.
+STT_OPTIONS = list(STT_ENGINES)
+LLM_OPTIONS = list(LLM_PROVIDERS)
 
 # ── 컬러 팔레트 — Material 3 다크 테마 기반 ──
 # 톤 기준 (Material 3 reference palette, purple 톤):
@@ -3086,7 +3088,7 @@ class GuruNoteApp(ctk.CTk):
             ).grid(row=2 + i, column=0, padx=10, pady=2, sticky="ew")
 
         ctk.CTkLabel(
-            sb, text="v1.0.0.28", font=ctk.CTkFont(size=10), text_color=C_TEXT_DIM,
+            sb, text="v1.0.0.29", font=ctk.CTkFont(size=10), text_color=C_TEXT_DIM,
         ).grid(row=7, column=0, padx=20, pady=(0, 16), sticky="sw")
 
     # ── 메인 영역 ────────────────────────────────────────────

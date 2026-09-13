@@ -24,6 +24,7 @@ import tempfile
 import streamlit as st
 from dotenv import load_dotenv
 
+from gurunote.options import LLM_PROVIDERS, STT_ENGINES
 from gurunote.audio import (
     SUPPORTED_EXTS,
     AudioDownloadResult,
@@ -88,7 +89,7 @@ def render_sidebar() -> dict:
         st.divider()
 
         st.subheader("⚙️ 설정")
-        stt_options = ["auto", "whisperx", "mlx", "assemblyai"]
+        stt_options = list(STT_ENGINES)
         env_stt = os.environ.get("GURUNOTE_STT_ENGINE", "auto").lower().strip()
         stt_default = stt_options.index(env_stt) if env_stt in stt_options else 0
         engine_label = st.selectbox(
@@ -106,7 +107,7 @@ def render_sidebar() -> dict:
         env_provider = os.environ.get("LLM_PROVIDER", "openai")
         provider = st.selectbox(
             "LLM Provider",
-            options=["openai", "openai_compatible", "anthropic", "gemini"],
+            options=list(LLM_PROVIDERS),
             index=0 if env_provider == "openai" else (2 if env_provider == "anthropic" else 1),
         )
 
@@ -354,7 +355,7 @@ def render_settings_tab(default_provider: str) -> None:
     with st.form("settings_form"):
         provider = st.selectbox(
             "LLM Provider",
-            options=["openai", "openai_compatible", "anthropic", "gemini"],
+            options=list(LLM_PROVIDERS),
             index=0 if default_provider == "openai" else (2 if default_provider == "anthropic" else 1),
             help="openai_compatible: oMLX / vLLM / Ollama / LM Studio / llama.cpp 서버 등",
         )

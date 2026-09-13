@@ -7,6 +7,46 @@
 
 ## [Unreleased]
 
+## [1.0.0.29] - 2026-09-14
+
+에이전트·스크립트가 쓸 수 있는 진입점을 만드는 모듈화 1단계. 그동안 파이프라인에
+닿는 경로는 GUI 를 띄우는 것뿐이었다.
+
+### Added
+
+- `gurunote/pipeline.py` — 파이프라인 동기 실행 API. `run_pipeline(source, ...)` 가 끝까지
+  기다렸다가 `PipelineResult`(ok / job_id / full_md / summary_md / error / logs) 를 돌려준다.
+  `PipelineWorker` 의 스레드 + 3 큐 배선을 호출자가 다루지 않아도 된다. 파이프라인 로직은
+  옮기지 않았고 큐를 비우고 스레드를 정리하는 층만 새로 넣었다. `resolve_source` 가 URL 인지
+  파일인지 한 곳에서 판정한다.
+- `gurunote/cli.py`, `gurunote/__main__.py`, pyproject 의 `[project.scripts]` — `gurunote note`
+  / `engines` / `providers`. 노트와 `--json` 은 stdout, 진행 로그는 stderr 로 분리해
+  `> note.md` 로 받아도 섞이지 않는다. 종료 코드는 성공 0, 파이프라인 실패 1, 입력·옵션
+  오류 2, `--timeout` 초과 124.
+- `gurunote/options.py` — STT 엔진과 LLM provider 목록의 단일 출처.
+- `tests/test_pipeline_api.py` 26 건 — 가짜 워커를 주입해 큐 계약, 입력 판정, 타임아웃,
+  결과 없이 죽은 스레드, CLI 출력 스트림과 종료 코드를 검사한다. 실제 STT·LLM 은 부르지 않는다.
+- `tests/test_options_single_source.py` 7 건 — 진입점이 목록을 다시 하드코딩하면 실패한다.
+
+### Changed
+
+- `gui.py`, `app.py` 가 선택지 목록을 각자 하드코딩하던 것을 `gurunote.options` 참조로 바꿨다.
+  같은 목록이 `gui.py`·`app.py`·`MainScreen.jsx` 3 곳에 복사돼 있었다. React 쪽은 리터럴로
+  남겨두고 드리프트만 테스트로 잡는다.
+- README 의 주요 기능·실행·프로젝트 구조·FAQ 에 CLI 사용법을 넣고, 구조도에 누락돼 있던
+  `tests.yml` 을 추가했다.
+
+### Fixed
+
+- `[Unreleased]` 와 직전 릴리스 사이에 빈 줄이 두 개 들어가 있던 것을 하나로 고쳤다
+  (1.0.0.28 을 넣을 때 생긴 것).
+
+### Notes
+
+- 파이프라인 동작 변경 없음. STT / 번역 / 요약 / 내보내기 경로는 손대지 않았다.
+- `--provider` 를 주지 않으면 종전처럼 `LLM_PROVIDER` 환경변수를 따른다. 그 fallback 이
+  `openai` 라는 것을 `LLMConfig.from_env` 를 실제로 실행해 확인한 뒤 상수로 적었다.
+- 전체 299 건 통과 (1.0.0.28 의 266 건 + 33 건).
 
 ## [1.0.0.28] - 2026-09-13
 
@@ -1757,7 +1797,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.28...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.29...HEAD
+[1.0.0.29]: https://github.com/avlp12/GuruNote/compare/v1.0.0.28...v1.0.0.29
 [1.0.0.28]: https://github.com/avlp12/GuruNote/compare/v1.0.0.27...v1.0.0.28
 [1.0.0.27]: https://github.com/avlp12/GuruNote/compare/v1.0.0.26...v1.0.0.27
 [1.0.0.26]: https://github.com/avlp12/GuruNote/compare/v1.0.0.25...v1.0.0.26
