@@ -354,6 +354,9 @@ python3 app_webview.py
 gurunote note "https://www.youtube.com/watch?v=..." --out note.md
 gurunote note ./talk.mp3 --engine mlx
 gurunote note "https://youtu.be/..." --json          # 기계가 읽는 결과
+gurunote history --limit 10                           # 저장된 작업 기록
+gurunote search "확산 모델" --json                      # 의미 검색 (인덱스 필요)
+gurunote settings                                     # 현재 설정 (비밀값은 설정 여부만)
 gurunote engines                                      # 선택 가능한 STT 엔진
 gurunote providers                                    # 선택 가능한 LLM provider
 python -m gurunote --version                          # 설치 스크립트 없이도 동작
@@ -379,6 +382,16 @@ else:
 
 `--provider` 를 주지 않으면 `LLM_PROVIDER` 환경변수를 따릅니다. 선택지 정본은
 `gurunote/options.py` 이며 GUI·CLI·React 가 같은 목록을 참조합니다.
+
+`history` / `search` / `settings` 는 React UI 가 쓰는 것과 **같은 `GuruNoteService`** 를 호출합니다. 창이 필요한 것(파일 선택 대화상자, 진행 이벤트 전달)만 `webui/bridge.py` 에 남아 있고, 나머지 29개 동작은 창 없이 파이썬에서도 부를 수 있습니다.
+
+```python
+from gurunote.service import GuruNoteService
+
+svc = GuruNoteService()          # 창 불필요
+print(svc.list_history(limit=5))
+print(svc.get_settings())        # 비밀값은 평문으로 반환하지 않음
+```
 
 ### 옛 진입점 — v0.8 호환 (유지)
 
@@ -485,7 +498,8 @@ GuruNote/
 ├── gurunote/
 │   ├── __init__.py
 │   ├── __main__.py             # `python -m gurunote` 진입점
-│   ├── cli.py                  # 명령줄 인터페이스 (note / engines / providers)
+│   ├── cli.py                  # 명령줄 인터페이스 (note / history / search / settings / engines / providers)
+│   ├── service.py              # 창 없는 조작 표면 — bridge 와 CLI 가 공유
 │   ├── pipeline.py             # 파이프라인 동기 실행 API (run_pipeline)
 │   ├── options.py              # STT 엔진 / LLM provider 목록의 단일 출처
 │   ├── types.py                # Segment / Transcript 공통 데이터클래스
@@ -556,7 +570,7 @@ GuruNote/
 주요 변경 사항은 [CHANGELOG.md](./CHANGELOG.md) 에 [Keep a Changelog](https://keepachangelog.com/)
 형식으로 기록되며 버전은 [Semantic Versioning](https://semver.org/) 을 따릅니다.
 
-현재 버전: **v1.0.0.30** — `gurunote/llm.py` 3447행을 `gurunote/llm/` 패키지 8개 모듈로 나눴습니다. `from gurunote.llm import ...` 는 그대로 동작합니다. 동작 변경은 없습니다.
+현재 버전: **v1.0.0.31** — `Api` 의 창 없는 동작 29개를 `gurunote/service.py` 로 분리했습니다. React UI 와 CLI 가 같은 코드를 씁니다(`gurunote history` / `search` / `settings` 추가). 동작 변경은 없습니다.
 
 ### v1.0.0.0 주요 변경 (요약)
 

@@ -20,9 +20,10 @@
   summarize). `__init__` 이 107개 전량 re-export 해 `from gurunote.llm import X` 유지.
   의존 순환 없음. 모듈을 넘는 참조는 모듈 경유로 부르고(patch 지점 고정), 테스트 patch
   표적 86곳을 정의 모듈로 맞췄다. `tests/test_llm_package_surface.py` 41건 추가. 340건 통과.
-- 3단계 not_started: `webui/bridge.py` 의 `Api` 클래스(public 메서드 33개)에서 GUI 전용
-  (`bind_window`, `pick_file`) 을 뺀 서비스 계층 추출. webview bridge 와 CLI 가 같은 코드를
-  호출하게 한다.
+- 3단계 **완료** (9/14, v1.0.0.31): `gurunote/service.py` 의 `GuruNoteService` 로 창 없는
+  동작 29개 이전. `Api` 는 이를 상속하고 window 배선 + 대화상자 4개만 유지 — JS 표면 불변.
+  CLI 에 `history` / `search` / `settings` 를 붙여 같은 함수 객체를 호출하는 것을 확인했다.
+  `tests/test_service_layer.py` 26건 추가. 366건 통과.
 - 4단계 not_started: 3단계 서비스 위에 SKILL.md 또는 MCP 서버.
 - 우선순위: P1 (진입점이 늘어날수록 중복·드리프트 비용이 커짐)
 

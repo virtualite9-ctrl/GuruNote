@@ -5,7 +5,12 @@
 
     gurunote note "https://youtu.be/..." --out note.md
     gurunote note ./talk.mp3 --engine mlx --json
+    gurunote history --limit 10
+    gurunote search "확산 모델" --json
     gurunote engines
+
+`history` / `search` / `settings` 는 React UI 가 쓰는 것과 같은 `GuruNoteService` 를
+호출한다. 같은 동작이 창을 띄우는 경로와 터미널 양쪽에서 하나의 코드로 돌아간다.
 """
 from __future__ import annotations
 
@@ -23,6 +28,7 @@ from gurunote.options import (
     USE_ENV_LLM_PROVIDER,
 )
 from gurunote.pipeline import PipelineTimeout, run_pipeline
+from gurunote.service import GuruNoteService
 
 __all__ = ["build_parser", "main"]
 
@@ -49,6 +55,19 @@ def build_parser() -> argparse.ArgumentParser:
     note.add_argument("--timeout", type=float, metavar="SEC", help="초과 시 중지를 요청한다")
     note.add_argument("--json", action="store_true", help="사람이 읽는 노트 대신 JSON 결과를 낸다")
     note.add_argument("--quiet", action="store_true", help="진행 로그를 stderr 로도 내지 않는다")
+
+    history = sub.add_parser("history", help="저장된 작업 기록을 나열한다")
+    history.add_argument("--limit", type=int, default=20, metavar="N", help="최대 개수 (기본 20)")
+    history.add_argument("--offset", type=int, default=0, metavar="N", help="건너뛸 개수")
+    history.add_argument("--json", action="store_true", help="JSON 으로 출력")
+
+    search = sub.add_parser("search", help="의미 유사도 검색 (인덱스 필요)")
+    search.add_argument("query", help="검색어")
+    search.add_argument("--top-k", type=int, default=10, metavar="N", help="결과 개수 (기본 10)")
+    search.add_argument("--json", action="store_true", help="JSON 으로 출력")
+
+    settings = sub.add_parser("settings", help="현재 설정을 보여준다 (비밀값은 설정 여부만)")
+    settings.add_argument("--json", action="store_true", help="JSON 으로 출력")
 
     sub.add_parser("engines", help="선택 가능한 STT 엔진을 나열한다")
     sub.add_parser("providers", help="선택 가능한 LLM provider 를 나열한다")
@@ -99,10 +118,75 @@ def _run_note(args: argparse.Namespace) -> int:
     return 0
 
 
+def _emit(result: dict, as_json: bool, render) -> int:
+    """서비스 응답을 출력한다. 실패는 stderr + 종료코드 1."""
+    if as_json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result.get("ok") else 1
+    if not result.get("ok"):
+        code = result.get("code", "ERROR")
+        print(f"gurunote: {code}: {result.get('error', '알 수 없는 실패')}", file=sys.stderr)
+        return 1
+    render(result)
+    return 0
+
+
+def _run_history(args: argparse.Namespace) -> int:
+    result = GuruNoteService().list_history(limit=args.limit, offset=args.offset)
+
+    def render(data: dict) -> None:
+        items = data.get("items", [])
+        if not items:
+            print("기록이 없습니다.")
+            return
+        for item in items:
+            status = item.get("status", "?")
+            print(f"{item.get('job_id', '?')}  {status:8}  {item.get('title', '(제목 없음)')}")
+        total = data.get("total")
+        if total is not None:
+            print(f"\n{len(items)}건 표시 / 전체 {total}건")
+
+    return _emit(result, args.json, render)
+
+
+def _run_search(args: argparse.Namespace) -> int:
+    result = GuruNoteService().semantic_search(query=args.query, top_k=args.top_k)
+
+    def render(data: dict) -> None:
+        hits = data.get("results", []) or data.get("items", [])
+        if not hits:
+            print("결과가 없습니다.")
+            return
+        for hit in hits:
+            score = hit.get("score")
+            head = f"{score:.3f}" if isinstance(score, (int, float)) else "-"
+            print(f"{head}  {hit.get('job_id', '?')}  {hit.get('title', '')}")
+
+    return _emit(result, args.json, render)
+
+
+def _run_settings(args: argparse.Namespace) -> int:
+    result = GuruNoteService().get_settings()
+
+    def render(data: dict) -> None:
+        for key, value in sorted(data.get("values", {}).items()):
+            print(f"{key}={value}")
+        for key, is_set in sorted(data.get("secrets_set", {}).items()):
+            print(f"{key}={'(설정됨)' if is_set else '(미설정)'}")
+
+    return _emit(result, args.json, render)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "note":
         return _run_note(args)
+    if args.command == "history":
+        return _run_history(args)
+    if args.command == "search":
+        return _run_search(args)
+    if args.command == "settings":
+        return _run_settings(args)
     if args.command == "engines":
         for name in STT_ENGINES:
             print(name)
