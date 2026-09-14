@@ -570,7 +570,7 @@ GuruNote/
 주요 변경 사항은 [CHANGELOG.md](./CHANGELOG.md) 에 [Keep a Changelog](https://keepachangelog.com/)
 형식으로 기록되며 버전은 [Semantic Versioning](https://semver.org/) 을 따릅니다.
 
-현재 버전: **v1.0.0.31** — `Api` 의 창 없는 동작 29개를 `gurunote/service.py` 로 분리했습니다. React UI 와 CLI 가 같은 코드를 씁니다(`gurunote history` / `search` / `settings` 추가). 동작 변경은 없습니다.
+현재 버전: **v1.0.0.32** — 진입점(`gui.py`, `app_webview.py`) import 스모크 검사를 CI 에 추가했습니다. 기능 변경은 없습니다.
 
 ### v1.0.0.0 주요 변경 (요약)
 
