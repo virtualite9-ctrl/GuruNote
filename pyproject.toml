@@ -30,6 +30,8 @@ dev = [
     # gurunote.audio 가 모듈 레벨에서 yt_dlp 를 import 하고,
     # gurunote.pipeline_worker 가 그 모듈을 끌어온다. import 검사에 필요하다.
     "yt-dlp>=2024.3.10",
+    # gui.py 가 모듈 레벨에서 dotenv 를 import 한다. 진입점 import 검사에 필요하다.
+    "python-dotenv>=1.0",
 ]
 
 # pytest 설정은 pytest.ini 가 source-of-truth (중복 방지).

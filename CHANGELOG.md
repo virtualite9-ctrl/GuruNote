@@ -7,6 +7,29 @@
 
 ## [Unreleased]
 
+## [1.0.0.32] - 2026-09-14
+
+`gui.py` 와 `app_webview.py` 는 최근 네 번의 리팩터가 모두 건드렸는데, CI 에 tkinter 와
+pywebview 가 없어 AST 로만 확인해 왔다. 정적 검사는 import 한 이름이 실제로 존재하는지
+알려주지 못한다.
+
+### Added
+
+- `tests/test_entry_points_import.py` 8건 — UI 툴킷만 스텁으로 갈아끼우고 진입점을 실제로
+  import 한다. `gui.py` 가 뜨는지, 선택지 목록이 `gurunote.options` 에서 오는지,
+  `gui.PipelineWorker` 가 추출된 클래스와 같은 객체인지, 사이드바 버전 문자열이 패키지
+  버전과 맞는지, `webui/session.py` 가 추출된 워커를 쓰는지, JSX 가 부르는
+  `api.<method>` 22개가 실제로 노출되는지. pywebview 가 있으면 그 열거 방식
+  (`dir()` + `inspect.ismethod`, webview/util.py)으로 서비스 메서드 노출까지 확인하고,
+  없으면 해당 2건만 건너뛴다.
+- `python-dotenv` 를 `dev` optional-dependency 로 선언. `gui.py` 가 모듈 레벨에서 쓴다.
+
+### Notes
+
+- 기능 변경 없음. 검사만 추가했다.
+- 전체 372건 통과 + 2건 skip (pywebview 없는 환경). pywebview 가 있으면 374건.
+- 창을 띄우지는 않는다. 위젯 렌더링과 사용자 상호작용은 여전히 사람이 확인해야 한다.
+
 ## [1.0.0.31] - 2026-09-14
 
 모듈화 3단계 (backlog B13). `webui/bridge.py` 의 `Api` 는 pywebview 의 `js_api` 로 쓰이는
@@ -1879,7 +1902,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.31...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.32...HEAD
+[1.0.0.32]: https://github.com/avlp12/GuruNote/compare/v1.0.0.31...v1.0.0.32
 [1.0.0.31]: https://github.com/avlp12/GuruNote/compare/v1.0.0.30...v1.0.0.31
 [1.0.0.30]: https://github.com/avlp12/GuruNote/compare/v1.0.0.29...v1.0.0.30
 [1.0.0.29]: https://github.com/avlp12/GuruNote/compare/v1.0.0.28...v1.0.0.29
