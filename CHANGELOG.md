@@ -7,6 +7,41 @@
 
 ## [Unreleased]
 
+## [1.0.0.31] - 2026-09-14
+
+모듈화 3단계 (backlog B13). `webui/bridge.py` 의 `Api` 는 pywebview 의 `js_api` 로 쓰이는
+클래스라, 창을 띄우지 않는 호출자는 그 안의 동작에 접근할 방법이 없었다. 실제로 창이
+필요한 것은 36개 중 4개뿐이었다.
+
+### Added
+
+- `gurunote/service.py` — `GuruNoteService`. `Api` 가 담고 있던 창 없는 동작 29개
+  (설정, 통용 표기, 기록, 의미 검색, 노트 편집, Obsidian/Notion 내보내기, 하드웨어 탐지,
+  연결 시험)를 옮겼다. 상태를 들지 않고 창 없이 인스턴스화된다.
+- CLI 명령 3개 — `gurunote history`, `gurunote search`, `gurunote settings`. React UI 가
+  쓰는 것과 **같은 함수 객체**를 호출한다 (`Api.list_history is
+  GuruNoteService.list_history`). `--json` 으로 기계가 읽는 출력, 실패는 stderr + 종료코드 1.
+- `tests/test_service_layer.py` 26건 — 서비스가 창·pywebview 없이 import·동작하는지,
+  `Api` 표면이 줄지 않았는지, bridge 가 서비스 메서드를 다시 정의하지 않는지, CLI 렌더링과
+  종료 코드.
+
+### Changed
+
+- `Api` 는 `GuruNoteService` 를 상속하고 window 배선(`__init__`, `bind_window`,
+  `_require_window`)과 창이 있어야만 되는 4개(`pick_file`, `start_pipeline`,
+  `select_obsidian_vault_dir`, `save_result_as`)만 갖는다. 위임 메서드를 나열하지 않으므로
+  JS 에 노출되는 표면이 그대로고 드리프트가 생길 자리가 없다.
+- 정의 본문은 옮기기만 했다. 원본 정의 줄 1335행이 생성물과 줄 단위로 일치한다.
+- `bridge.py` 의 모듈 docstring 을 고쳤다. "Phase 1 MVP status: skeleton — 대부분
+  NotImplementedError" 라고 적혀 있었으나 오래전에 구현이 끝난 상태였다.
+
+### Notes
+
+- 동작 변경 없음. JS 가 부르는 메서드 이름과 반환 형태 모두 그대로다.
+- 전체 366건 통과 (1.0.0.30 의 340건 + 26건). 실패 0.
+- 가드는 고의 위반으로 음성 검증했다 — `Api` 에 서비스 메서드를 다시 정의하면 실패하고,
+  서비스가 창을 건드리면 실패한다.
+
 ## [1.0.0.30] - 2026-09-14
 
 모듈화 2단계 (backlog B13). `gurunote/llm.py` 한 파일에 3447행, 함수 61개(public 12,
@@ -1844,7 +1879,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.30...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.31...HEAD
+[1.0.0.31]: https://github.com/avlp12/GuruNote/compare/v1.0.0.30...v1.0.0.31
 [1.0.0.30]: https://github.com/avlp12/GuruNote/compare/v1.0.0.29...v1.0.0.30
 [1.0.0.29]: https://github.com/avlp12/GuruNote/compare/v1.0.0.28...v1.0.0.29
 [1.0.0.28]: https://github.com/avlp12/GuruNote/compare/v1.0.0.27...v1.0.0.28
