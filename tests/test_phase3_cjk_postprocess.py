@@ -136,7 +136,7 @@ class TestSubPathA:
 # =============================================================================
 class TestSubPathBMock:
     def test_llm_mock_success_first_try(self, mock_llm_config):
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = "이것은 깨끗한 한국어입니다"
             result = _llm_remap_cjk("我认为 some text", mock_llm_config, max_retries=3)
             assert result == "이것은 깨끗한 한국어입니다"
@@ -144,7 +144,7 @@ class TestSubPathBMock:
 
     def test_llm_mock_retry_then_success(self, mock_llm_config):
         # 첫 2회 한자 잔재, 3회차 한국어 정합
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.side_effect = [
                 "여전히 我们 잔재",
                 "또 잔재 对吧",
@@ -155,7 +155,7 @@ class TestSubPathBMock:
             assert mock_call.call_count == 3
 
     def test_llm_mock_all_fail_returns_none(self, mock_llm_config):
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = "잔재 我们 한자 잔존"
             result = _llm_remap_cjk("입력 我们", mock_llm_config, max_retries=3)
             assert result is None
@@ -163,7 +163,7 @@ class TestSubPathBMock:
 
     def test_llm_mock_exception_then_success(self, mock_llm_config):
         # 첫 호출 예외 → 두 번째 한국어 정합
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.side_effect = [
                 RuntimeError("network fail"),
                 "깨끗한 한국어 결과",
@@ -174,7 +174,7 @@ class TestSubPathBMock:
 
     def test_llm_mock_max_retries_respected(self, mock_llm_config):
         # max_retries=1 — 1회만 호출
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = "여전히 我们 잔재"
             result = _llm_remap_cjk("입력", mock_llm_config, max_retries=1)
             assert result is None
@@ -188,7 +188,7 @@ class TestSubPathC:
     def test_fallback_appended_inline_tag(self, mock_llm_config, sample_segments):
         # Sub-B 가 3회 모두 잔재 반환 → Sub-C 발동
         input_text = "[02:15] 화자 A: 这是完全的中文文本难以翻译"
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = "여전히 中文 잔재"
             result = post_process_cjk(input_text, sample_segments, mock_llm_config)
         # 영문 원문 등장 + [⚠ fallback] 태그
@@ -202,7 +202,7 @@ class TestSubPathC:
     def test_no_segment_match_residue_preserved(self, mock_llm_config):
         # segments 부재 → Sub-C 진입 부재, 원본 잔재 잔존
         input_text = "[99:59] Unknown: 这是中文"
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = "여전히 中文"
             result = post_process_cjk(input_text, [], mock_llm_config)
         # 원본 잔존 (Sub-C segment 매칭 실패)
@@ -213,7 +213,7 @@ class TestSubPathC:
     def test_multiple_segments_correct_lookup(self, mock_llm_config, sample_segments):
         # [05:30] 발화 → sample_segments 의 두 번째 (start=330.0)
         input_text = "[05:30] 화자 B: 中文 잔재 텍스트"
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = "여전히 中文"
             result = post_process_cjk(input_text, sample_segments, mock_llm_config)
         # 두 번째 segment 의 영문 원문 등장
@@ -228,7 +228,7 @@ class TestIntegration:
     def test_dict_only_clean(self, mock_llm_config, sample_segments):
         """Sub-A 만으로 한자 0건 — Sub-B 호출 부재."""
         input_text = "[02:15] 화자 A: 我们 정합"
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             result = post_process_cjk(input_text, sample_segments, mock_llm_config)
         # Sub-B 호출 부재
         assert mock_call.call_count == 0
@@ -239,7 +239,7 @@ class TestIntegration:
     def test_dict_then_llm_first_try(self, mock_llm_config, sample_segments):
         """Sub-A 미적중 → Sub-B 첫 시도 정합."""
         input_text = "[02:15] 화자 A: 高血压 미등록"  # yaml 부재 패턴
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = "깨끗한 한국어 출력"
             result = post_process_cjk(input_text, sample_segments, mock_llm_config)
         assert mock_call.call_count == 1
@@ -249,7 +249,7 @@ class TestIntegration:
     def test_dict_llm_fallback_to_c(self, mock_llm_config, sample_segments):
         """Sub-A 미적중 + Sub-B 3회 모두 실패 → Sub-C fallback."""
         input_text = "[02:15] 화자 A: 这是难以翻译的中文文本"
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = "여전히 中文 잔재"
             result = post_process_cjk(input_text, sample_segments, mock_llm_config)
         # Sub-B 3회 호출
@@ -261,7 +261,7 @@ class TestIntegration:
     def test_no_cjk_no_processing(self, mock_llm_config, sample_segments):
         """CJK 0건 입력 → 후처리 미발동, 결과 동일."""
         input_text = "[02:15] 화자 A: 깨끗한 한국어 입력입니다"
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             result = post_process_cjk(input_text, sample_segments, mock_llm_config)
         assert mock_call.call_count == 0
         assert result == input_text
@@ -273,7 +273,7 @@ class TestIntegration:
             "[05:30] 화자 B: 깨끗한 한국어\n\n"
             "[10:00] 화자 A: 对吧"
         )
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             result = post_process_cjk(input_text, sample_segments, mock_llm_config)
         # 모두 Sub-A 만으로 처리됨 → Sub-B 호출 부재
         assert mock_call.call_count == 0

@@ -15,10 +15,11 @@
 - 목표: 사람이 창을 띄우는 것 외의 경로로도 파이프라인과 기능을 쓸 수 있게 한다.
 - 1단계 **완료** (9/14, v1.0.0.29): `gurunote/pipeline.py` 동기 API + `gurunote/cli.py`
   (`note`/`engines`/`providers`) + `gurunote/options.py` 단일 출처. 테스트 33건.
-- 2단계 not_started: `gurunote/llm.py` 3447행 / 함수 61개(public 12, private 49) 분할.
-  client / translate / summarize / entities / postprocess / grounding 으로 나누고
-  `gurunote/llm.py` 는 re-export shim 으로 남긴다 (B09 의 `gui.py` 방식). 테스트가
-  `gurunote.llm` 에서 import 하므로 shim 이 하위 호환을 유지한다.
+- 2단계 **완료** (9/14, v1.0.0.30): `gurunote/llm.py` 3447행 → `gurunote/llm/` 패키지
+  8개 모듈 (client / prompts / chunking / context / entities / postprocess / translate /
+  summarize). `__init__` 이 107개 전량 re-export 해 `from gurunote.llm import X` 유지.
+  의존 순환 없음. 모듈을 넘는 참조는 모듈 경유로 부르고(patch 지점 고정), 테스트 patch
+  표적 86곳을 정의 모듈로 맞췄다. `tests/test_llm_package_surface.py` 41건 추가. 340건 통과.
 - 3단계 not_started: `webui/bridge.py` 의 `Api` 클래스(public 메서드 33개)에서 GUI 전용
   (`bind_window`, `pick_file`) 을 뺀 서비스 계층 추출. webview bridge 와 CLI 가 같은 코드를
   호출하게 한다.

@@ -58,7 +58,7 @@ def _isolate_entity_cache(tmp_path, monkeypatch):
     """
     import gurunote.llm as _llm
 
-    monkeypatch.setattr(_llm, "CACHE_DIR", tmp_path / "entity_cache")
+    monkeypatch.setattr("gurunote.llm.entities.CACHE_DIR", tmp_path / "entity_cache")
 
 
 @pytest.fixture(autouse=True)

@@ -118,7 +118,7 @@ class TestVerifyEntities:
 # load_stt_corrections — 디스크 round-trip
 # =============================================================================
 def test_load_stt_corrections_roundtrip(tmp_path, monkeypatch):
-    monkeypatch.setattr(llm, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr("gurunote.llm.entities.CACHE_DIR", tmp_path)
     video_context = {"title": "Druckenmiller Interview"}
     cache_key = _compute_cache_key_from_title(video_context["title"])
     entities = {
@@ -135,7 +135,7 @@ def test_load_stt_corrections_none_context():
 
 
 def test_load_stt_corrections_cache_miss(tmp_path, monkeypatch):
-    monkeypatch.setattr(llm, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr("gurunote.llm.entities.CACHE_DIR", tmp_path)
     assert load_stt_corrections({"title": "No Cache"}) == {}
 
 
@@ -187,7 +187,7 @@ def test_frontmatter_omits_field_when_no_corrections():
 # translate_transcript 통합 — 본문 병기 전파 + 디스크 영속 + 토글
 # =============================================================================
 def _run_translate(search_on, search_fn, monkeypatch, tmp_path, video_context, bootstrap=None):
-    monkeypatch.setattr(llm, "_CANONICAL_NAMES_PATH", tmp_path / "canonical_names.json")
+    monkeypatch.setattr("gurunote.llm.entities._CANONICAL_NAMES_PATH", tmp_path / "canonical_names.json")
     if search_on:
         monkeypatch.setenv("GURUNOTE_SEARCH_GROUNDING", "1")
     else:
@@ -202,11 +202,11 @@ def _run_translate(search_on, search_fn, monkeypatch, tmp_path, video_context, b
     if bootstrap is None:
         bootstrap = {"Kevin Wurst": {"korean": "케빈 워스트", "type": "person", "source": "bootstrap"}}
     chunk_out = "[00:00] 케빈 워스트(Kevin Wurst): 안녕하세요."
-    with patch.object(llm, "_check_xgrammar_available", return_value=True), \
-         patch.object(llm, "_bootstrap_entity_cache_from_metadata", return_value=bootstrap), \
-         patch.object(llm, "translate_chunk_index_mapping_v2", return_value=chunk_out), \
-         patch.object(llm, "post_process_cjk", side_effect=lambda result, *a, **k: result), \
-         patch.object(llm, "_canonicalize_entity_names", side_effect=lambda result, *a, **k: result):
+    with patch("gurunote.llm.client._check_xgrammar_available", return_value=True), \
+         patch("gurunote.llm.entities._bootstrap_entity_cache_from_metadata", return_value=bootstrap), \
+         patch("gurunote.llm.translate.translate_chunk_index_mapping_v2", return_value=chunk_out), \
+         patch("gurunote.llm.postprocess.post_process_cjk", side_effect=lambda result, *a, **k: result), \
+         patch("gurunote.llm.entities._canonicalize_entity_names", side_effect=lambda result, *a, **k: result):
         # _canonicalize_entity_names 는 entity_cache 비지 않으면 실제 LLM 호출 → mock 차단.
         # 검색 본문 전파는 이 후처리 뒤라 identity mock 이 전파 단언에 영향 없음.
         return translate_transcript(

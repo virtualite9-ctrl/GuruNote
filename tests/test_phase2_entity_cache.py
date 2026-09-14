@@ -170,7 +170,7 @@ class TestBootstrapEntityCacheMock:
             "uploader": "NVIDIA",
             "description": "Pankaj Sharma from Schneider Electric discusses AI infrastructure.",
         }
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = (
                 "Pankaj Sharma → 판카즈 샤르마 [person]\n"
                 "Schneider Electric → 슈나이더 일렉트릭 [company]\n"
@@ -186,7 +186,7 @@ class TestBootstrapEntityCacheMock:
 
     def test_subtitles_only(self, mock_llm_config):
         subs = "Hello, I'm Tiffany Janzen and today I'm joined by Pankaj Sharma."
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = (
                 "Tiffany Janzen → 티파니 잔젠 [person]\n"
                 "Pankaj Sharma → 판카즈 샤르마 [person]"
@@ -201,7 +201,7 @@ class TestBootstrapEntityCacheMock:
     def test_both_metadata_and_subtitles(self, mock_llm_config):
         ctx = {"title": "AI Conference", "description": "Talks"}
         subs = "Speakers: Jensen Huang, Pankaj Sharma."
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = "Jensen Huang → 젠슨 황\nPankaj Sharma → 판카즈 샤르마"
             result = _bootstrap_entity_cache_from_metadata(ctx, subs, mock_llm_config)
         assert mock_call.call_count == 1
@@ -213,7 +213,7 @@ class TestBootstrapEntityCacheMock:
         assert len(result) == 2
 
     def test_no_input_returns_empty(self, mock_llm_config):
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             result = _bootstrap_entity_cache_from_metadata(None, None, mock_llm_config)
         assert mock_call.call_count == 0
         assert result == {}
@@ -221,7 +221,7 @@ class TestBootstrapEntityCacheMock:
     def test_empty_video_context_no_input(self, mock_llm_config):
         # 모든 필드가 빈 video_context
         ctx = {"title": "", "description": "", "uploader": ""}
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             result = _bootstrap_entity_cache_from_metadata(ctx, None, mock_llm_config)
         # 추출할 텍스트 부재 → LLM 호출 부재
         assert mock_call.call_count == 0
@@ -229,21 +229,21 @@ class TestBootstrapEntityCacheMock:
 
     def test_llm_exception_returns_empty(self, mock_llm_config):
         ctx = {"title": "Test Video"}
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.side_effect = RuntimeError("network fail")
             result = _bootstrap_entity_cache_from_metadata(ctx, None, mock_llm_config)
         assert result == {}
 
     def test_llm_empty_response_returns_empty(self, mock_llm_config):
         ctx = {"title": "Test Video"}
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = ""
             result = _bootstrap_entity_cache_from_metadata(ctx, None, mock_llm_config)
         assert result == {}
 
     def test_malformed_llm_response_skips_bad_lines(self, mock_llm_config):
         ctx = {"title": "Test"}
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             # 일부 라인은 정합, 일부는 → 부재. type 부재 라인은 unknown 으로 fallback.
             mock_call.return_value = (
                 "Pankaj Sharma → 판카즈 샤르마 [person]\n"
@@ -261,7 +261,7 @@ class TestBootstrapEntityCacheMock:
     def test_long_subtitles_truncated_to_3000(self, mock_llm_config):
         # 3000자 이상 자막 → 첫 3000자만 LLM 에 전달
         long_subs = "X" * 5000
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = ""
             _bootstrap_entity_cache_from_metadata(None, long_subs, mock_llm_config)
         # LLM 호출 인자에 5000자가 아닌 첫 3000자만 포함
@@ -273,7 +273,7 @@ class TestBootstrapEntityCacheMock:
     def test_dash_prefix_stripped(self, mock_llm_config):
         # markdown 의 "- Name → 표기 [type]" 형식 인풋도 catch
         ctx = {"title": "Test"}
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = "- Pankaj Sharma → 판카즈 샤르마 [person]"
             result = _bootstrap_entity_cache_from_metadata(ctx, None, mock_llm_config)
         assert result == {

@@ -492,7 +492,15 @@ GuruNote/
 │   ├── audio.py                # Step 1 — yt-dlp + 로컬 파일 오디오 추출
 │   ├── stt.py                  # Step 2 — WhisperX (NVIDIA) + AssemblyAI 폴백 라우터
 │   ├── stt_mlx.py              # Step 2 — MLX Whisper + pyannote (Apple Silicon) + 의미 단위 재분할 (v1.0+)
-│   ├── llm.py                  # Step 3~4 — 번역 + 요약 (2-pass DCCD + entity_cache + CJK 차단 + 청크 분할)
+│   ├── llm/                    # Step 3~4 — LLM 번역·요약 (8개 모듈)
+│   │   ├── client.py           #   provider 호출 경계 (재시도·타임아웃·xgrammar)
+│   │   ├── prompts.py          #   system 프롬프트 본문
+│   │   ├── chunking.py         #   요청 단위 분할 규칙
+│   │   ├── context.py          #   영상 메타데이터 컨텍스트 블록
+│   │   ├── entities.py         #   entity/speaker 캐시·통용 표기·검색 그라운딩
+│   │   ├── postprocess.py      #   한자 차단·영문 병기 검증·반복 축약
+│   │   ├── translate.py        #   2-pass DCCD·index mapping
+│   │   └── summarize.py        #   요약·메타데이터 추출
 │   ├── exporter.py             # Step 4~5 — GuruNote 마크다운 조립
 │   ├── history.py              # 작업 히스토리 + 영속 로그 (~/.gurunote/)
 │   ├── settings.py             # `.env` 저장/로드 + 백업 유틸
@@ -548,7 +556,7 @@ GuruNote/
 주요 변경 사항은 [CHANGELOG.md](./CHANGELOG.md) 에 [Keep a Changelog](https://keepachangelog.com/)
 형식으로 기록되며 버전은 [Semantic Versioning](https://semver.org/) 을 따릅니다.
 
-현재 버전: **v1.0.0.29** — UI 없이 파이프라인을 실행하는 CLI(`gurunote note`)와 동기 API(`run_pipeline`) 추가. STT 엔진·LLM provider 목록을 `gurunote/options.py` 로 단일화했습니다. 파이프라인 동작 변경은 없습니다.
+현재 버전: **v1.0.0.30** — `gurunote/llm.py` 3447행을 `gurunote/llm/` 패키지 8개 모듈로 나눴습니다. `from gurunote.llm import ...` 는 그대로 동작합니다. 동작 변경은 없습니다.
 
 ### v1.0.0.0 주요 변경 (요약)
 

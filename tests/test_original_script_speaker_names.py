@@ -74,7 +74,7 @@ def test_empty_speaker_names_behaves_like_none():
 def test_load_speaker_names_roundtrip(tmp_path, monkeypatch):
     """디스크 cache 저장 → load_speaker_names 가 {라벨: english} 반환. prod ~/.gurunote 미접근."""
     # CACHE_DIR 를 tmp 로 격리 (save·load 둘 다 같은 상수를 본다).
-    monkeypatch.setattr(llm, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr("gurunote.llm.entities.CACHE_DIR", tmp_path)
 
     video_context = {"title": "Some Interview Video"}
     # gui.py 와 동일하게 to_context_dict 엔 id 가 없어 cache_key = title hash 로 귀결.
@@ -91,7 +91,7 @@ def test_load_speaker_names_roundtrip(tmp_path, monkeypatch):
 
 def test_load_speaker_names_cache_miss_returns_empty(tmp_path, monkeypatch):
     """cache 파일 부재 — 빈 dict (호출자는 라벨 fallback)."""
-    monkeypatch.setattr(llm, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr("gurunote.llm.entities.CACHE_DIR", tmp_path)
     assert load_speaker_names({"title": "No Cache Video"}) == {}
 
 
@@ -113,7 +113,7 @@ def test_save_gate_persists_speakers_when_no_entities(tmp_path, monkeypatch):
     저장 게이트는 실제 코드가 실행된다. CACHE_DIR 는 autouse fixture 로 tmp 격리,
     canonical_names 는 prod 쓰기 방지를 위해 tmp 로 격리.
     """
-    monkeypatch.setattr(llm, "_CANONICAL_NAMES_PATH", tmp_path / "canonical_names.json")
+    monkeypatch.setattr("gurunote.llm.entities._CANONICAL_NAMES_PATH", tmp_path / "canonical_names.json")
 
     transcript = Transcript(
         segments=[Segment(speaker="A", start=0.0, end=2.0, text="Hello there.")],
@@ -128,10 +128,10 @@ def test_save_gate_persists_speakers_when_no_entities(tmp_path, monkeypatch):
     # 영문 병기 없는 한국어 → _extract_entities 가 0건 → entity_cache 빈 채 유지.
     chunk_out = "[00:00] 일리아나 부잘리: 안녕하세요."
 
-    with patch.object(llm, "_check_xgrammar_available", return_value=True), \
-         patch.object(llm, "_bootstrap_entity_cache_from_metadata", return_value=speakers_only), \
-         patch.object(llm, "translate_chunk_index_mapping_v2", return_value=chunk_out), \
-         patch.object(llm, "post_process_cjk", side_effect=lambda result, *a, **k: result):
+    with patch("gurunote.llm.client._check_xgrammar_available", return_value=True), \
+         patch("gurunote.llm.entities._bootstrap_entity_cache_from_metadata", return_value=speakers_only), \
+         patch("gurunote.llm.translate.translate_chunk_index_mapping_v2", return_value=chunk_out), \
+         patch("gurunote.llm.postprocess.post_process_cjk", side_effect=lambda result, *a, **k: result):
         translate_transcript(transcript, config=cfg, video_context=video_context)
 
     # entity 0건이지만 화자 매핑이 디스크에 남아 load 가 실명을 돌려준다 (이전엔 {}).
@@ -140,7 +140,7 @@ def test_save_gate_persists_speakers_when_no_entities(tmp_path, monkeypatch):
 
 def test_save_gate_skips_when_phase2_off(tmp_path, monkeypatch):
     """회귀 방어: enable_phase2 off 면 speaker 가 있어도 저장 안 함 (게이트의 phase2 조건 유지)."""
-    monkeypatch.setattr(llm, "_CANONICAL_NAMES_PATH", tmp_path / "canonical_names.json")
+    monkeypatch.setattr("gurunote.llm.entities._CANONICAL_NAMES_PATH", tmp_path / "canonical_names.json")
     transcript = Transcript(
         segments=[Segment(speaker="A", start=0.0, end=2.0, text="Hello there.")],
         language="en",
@@ -150,9 +150,9 @@ def test_save_gate_skips_when_phase2_off(tmp_path, monkeypatch):
         provider="openai_compatible", model="mock", api_key="mock", base_url="http://mock.local/v1",
         enable_phase2=False,
     )
-    with patch.object(llm, "_check_xgrammar_available", return_value=True), \
-         patch.object(llm, "translate_chunk_index_mapping_v2", return_value="[00:00] 안녕하세요."), \
-         patch.object(llm, "post_process_cjk", side_effect=lambda result, *a, **k: result):
+    with patch("gurunote.llm.client._check_xgrammar_available", return_value=True), \
+         patch("gurunote.llm.translate.translate_chunk_index_mapping_v2", return_value="[00:00] 안녕하세요."), \
+         patch("gurunote.llm.postprocess.post_process_cjk", side_effect=lambda result, *a, **k: result):
         translate_transcript(transcript, config=cfg, video_context=video_context)
 
     assert load_speaker_names(video_context) == {}

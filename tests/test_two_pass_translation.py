@@ -91,8 +91,8 @@ class TestTwoPassIntegration:
         # 2단계가 정상 한국어 화자명 형식으로 반환 시 A5 strip 영향 부재
         aligned_outputs = ["티파니: 안녕", "판카즈: 잘 지내?", "티파니: 좋아"]
         aligned_json = json.dumps({"outputs": aligned_outputs}, ensure_ascii=False)
-        with patch("gurunote.llm._call_llm") as mock_freeform, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_align:
+        with patch("gurunote.llm.client._call_llm") as mock_freeform, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_align:
             mock_freeform.return_value = freeform_text
             mock_align.return_value = (aligned_json, "stop")
             outputs = _translate_chunk_two_pass(sample_chunk, "", mock_cfg)
@@ -103,8 +103,8 @@ class TestTwoPassIntegration:
 
     def test_freeform_timeout_returns_timeout_padding(self, mock_cfg, sample_chunk):
         # 1단계 timeout → 2단계 진입 부재, 즉시 [⚠ timeout] padding
-        with patch("gurunote.llm._call_llm") as mock_freeform, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_align:
+        with patch("gurunote.llm.client._call_llm") as mock_freeform, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_align:
             mock_freeform.side_effect = TimeoutError("freeform timeout")
             outputs = _translate_chunk_two_pass(sample_chunk, "", mock_cfg)
         assert outputs == [TIMEOUT_PADDING_MARKER] * 3
@@ -113,8 +113,8 @@ class TestTwoPassIntegration:
 
     def test_freeform_empty_returns_translation_missing_padding(self, mock_cfg, sample_chunk):
         # 1단계 빈 응답 → [번역 누락] padding
-        with patch("gurunote.llm._call_llm") as mock_freeform, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_align:
+        with patch("gurunote.llm.client._call_llm") as mock_freeform, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_align:
             mock_freeform.return_value = ""
             outputs = _translate_chunk_two_pass(sample_chunk, "", mock_cfg)
         assert outputs == ["[번역 누락]"] * 3
@@ -129,8 +129,8 @@ class TestToggle:
         # GURUNOTE_TWO_PASS=0 명시 → 1-pass
         monkeypatch.setenv("GURUNOTE_TWO_PASS", "0")
         outputs_json = json.dumps({"outputs": ["a", "b", "c"]}, ensure_ascii=False)
-        with patch("gurunote.llm._call_llm") as mock_freeform, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_one_pass:
+        with patch("gurunote.llm.client._call_llm") as mock_freeform, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_one_pass:
             mock_one_pass.return_value = (outputs_json, "stop")
             result = translate_chunk_index_mapping_v2(sample_chunk, "", mock_cfg)
         # 1-pass 경로 — _call_llm (freeform) 호출 부재
@@ -144,8 +144,8 @@ class TestToggle:
         # 5/23 — 2-pass 입력 본문만 (화자 부재), 출력도 본문만
         freeform_text = "안녕\n\n안녕\n\n좋아"
         aligned_json = json.dumps({"outputs": ["안녕", "안녕", "좋아"]}, ensure_ascii=False)
-        with patch("gurunote.llm._call_llm") as mock_freeform, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_align:
+        with patch("gurunote.llm.client._call_llm") as mock_freeform, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_align:
             mock_freeform.return_value = freeform_text
             mock_align.return_value = (aligned_json, "stop")
             result = translate_chunk_index_mapping_v2(sample_chunk, "", mock_cfg)
@@ -162,8 +162,8 @@ class TestToggle:
         for v in ["0", "false", "yes", ""]:
             monkeypatch.setenv("GURUNOTE_TWO_PASS", v)
             outputs_json = json.dumps({"outputs": ["x", "y", "z"]}, ensure_ascii=False)
-            with patch("gurunote.llm._call_llm") as mock_freeform, \
-                 patch("gurunote.llm._call_llm_with_continuation") as mock_one_pass:
+            with patch("gurunote.llm.client._call_llm") as mock_freeform, \
+                 patch("gurunote.llm.client._call_llm_with_continuation") as mock_one_pass:
                 mock_one_pass.return_value = (outputs_json, "stop")
                 translate_chunk_index_mapping_v2(sample_chunk, "", mock_cfg)
             assert mock_freeform.call_count == 0, f"v={v!r} 시 1-pass 진입 부재"
@@ -176,7 +176,7 @@ class TestR3LooseOnTimeout:
     def test_default_disabled_keeps_strict_on_timeout(self, mock_cfg):
         # 기본 enable_loose_on_timeout=False — 1-pass 동작 보존
         cfg = mock_cfg
-        with patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             # 3회 모두 timeout
             mock_call.side_effect = TimeoutError("timeout")
             outputs = _call_llm_with_index_mapping(
@@ -190,7 +190,7 @@ class TestR3LooseOnTimeout:
         # enable_loose_on_timeout=True — 2단계 전용 — timeout 시 loose 전환
         cfg = mock_cfg
         log_messages = []
-        with patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_call.side_effect = TimeoutError("timeout")
             _call_llm_with_index_mapping(
                 cfg, "prompt", expected_count=5, max_retries=3,
@@ -317,8 +317,8 @@ class TestTwoPassWithPostProcess:
                 "A: 티파니 잔젠: 답변",
             ]
         }, ensure_ascii=False)
-        with patch("gurunote.llm._call_llm") as mock_freeform, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_align:
+        with patch("gurunote.llm.client._call_llm") as mock_freeform, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_align:
             mock_freeform.return_value = freeform_text
             mock_align.return_value = (aligned_json, "stop")
             outputs = _translate_chunk_two_pass(sample_chunk, "", mock_cfg)
@@ -331,8 +331,8 @@ class TestTwoPassWithPostProcess:
         aligned_json = json.dumps({
             "outputs": ["정상 본문 1", "", "정상 본문 3"]
         }, ensure_ascii=False)
-        with patch("gurunote.llm._call_llm") as mock_freeform, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_align:
+        with patch("gurunote.llm.client._call_llm") as mock_freeform, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_align:
             mock_freeform.return_value = "정상 1\n\n정상 2\n\n정상 3"
             mock_align.return_value = (aligned_json, "stop")
             outputs = _translate_chunk_two_pass(sample_chunk, "", mock_cfg)
@@ -404,7 +404,7 @@ class TestBootstrapWithSpeakers:
             "title": "NVIDIA GTC Studio",
             "description": "Pankaj Sharma from Schneider Electric and Tiffany Janzen.",
         }
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = (
                 "Pankaj Sharma → 판카즈 샤르마 [person]\n"
                 "Tiffany Janzen → 티파니 잔젠 [person]\n"
@@ -426,7 +426,7 @@ class TestBootstrapWithSpeakers:
     def test_bootstrap_speakers_absent_when_llm_skips(self, mock_cfg):
         # SPEAKER 라인 부재 시 speakers 부재 (entity 만)
         ctx = {"title": "Test"}
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = "Pankaj Sharma → 판카즈 샤르마 [person]"
             result = _bootstrap_entity_cache_from_metadata(ctx, None, mock_cfg)
         # 마커 키 부재 catch
@@ -454,7 +454,7 @@ class TestCacheSchemaV2:
     def test_v1_cache_invalidated(self, tmp_path, monkeypatch):
         # v1 cache (cache_schema_version 부재) → load None
         import gurunote.llm as _llm
-        monkeypatch.setattr(_llm, "CACHE_DIR", tmp_path / "ec")
+        monkeypatch.setattr("gurunote.llm.entities.CACHE_DIR", tmp_path / "ec")
         (tmp_path / "ec").mkdir()
         old_data = {
             "video_id": "vid_old",
@@ -484,7 +484,7 @@ class TestRejectEmptyOutputs:
     def test_default_off_one_pass_passes_with_empty(self, mock_cfg):
         # 1-pass 동작 보존 — 빈 string 있어도 length 정합이면 return
         outputs_json = json.dumps({"outputs": ["a", "", "c"]}, ensure_ascii=False)
-        with patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_call.return_value = (outputs_json, "stop")
             result = _call_llm_with_index_mapping(
                 mock_cfg, "prompt", expected_count=3, max_retries=3,
@@ -499,7 +499,7 @@ class TestRejectEmptyOutputs:
             (json.dumps({"outputs": ["a", "", "c"]}, ensure_ascii=False), "stop"),
             (json.dumps({"outputs": ["a", "b", "c"]}, ensure_ascii=False), "stop"),
         ]
-        with patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_call.side_effect = empty_then_full
             result = _call_llm_with_index_mapping(
                 mock_cfg, "prompt", expected_count=3, max_retries=3,
@@ -511,7 +511,7 @@ class TestRejectEmptyOutputs:
     def test_all_retries_empty_returns_outputs_for_recovery(self, mock_cfg):
         # 3회 모두 빈 잔존 시 outputs 반환 (recovery 시퀀스가 잡음)
         outputs_json = json.dumps({"outputs": ["a", "", "c"]}, ensure_ascii=False)
-        with patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_call.return_value = (outputs_json, "stop")
             result = _call_llm_with_index_mapping(
                 mock_cfg, "prompt", expected_count=3, max_retries=3,
@@ -552,7 +552,7 @@ class TestRecoverEmptyOutputs:
         inputs = ["en 1", "en 2", "en 3"]
         chunk = self._make_chunk(3)
         # 3차 단독 재번역 mock
-        with patch("gurunote.llm._call_llm") as mock_solo:
+        with patch("gurunote.llm.client._call_llm") as mock_solo:
             mock_solo.return_value = "단독 재번역 결과"
             result = _recover_empty_outputs(
                 outputs, freeform_lines, inputs, chunk, mock_cfg
@@ -567,7 +567,7 @@ class TestRecoverEmptyOutputs:
         freeform_lines = ["fl 1", "", "fl 3"]   # idx 1 도 빈 → 2차 복구 부재
         inputs = ["en 1", "en 2", "en 3"]
         chunk = self._make_chunk(3)
-        with patch("gurunote.llm._call_llm") as mock_solo:
+        with patch("gurunote.llm.client._call_llm") as mock_solo:
             mock_solo.return_value = "단독 결과"
             result = _recover_empty_outputs(
                 outputs, freeform_lines, inputs, chunk, mock_cfg
@@ -582,7 +582,7 @@ class TestRecoverEmptyOutputs:
         freeform_lines = ["", "", ""]   # 1단계 모두 빈
         inputs = ["en 1", "en 2", "en 3"]
         chunk = self._make_chunk(3)
-        with patch("gurunote.llm._call_llm") as mock_solo:
+        with patch("gurunote.llm.client._call_llm") as mock_solo:
             mock_solo.return_value = ""   # 3차도 빈 응답
             result = _recover_empty_outputs(
                 outputs, freeform_lines, inputs, chunk, mock_cfg
@@ -593,7 +593,7 @@ class TestRecoverEmptyOutputs:
     def test_no_empty_no_recovery(self, mock_cfg):
         # 빈 부재 시 복구 호출 부재
         outputs = ["a", "b", "c"]
-        with patch("gurunote.llm._call_llm") as mock_solo:
+        with patch("gurunote.llm.client._call_llm") as mock_solo:
             result = _recover_empty_outputs(
                 outputs, ["fl1", "fl2", "fl3"], ["en1", "en2", "en3"],
                 self._make_chunk(3), mock_cfg
@@ -614,8 +614,8 @@ class TestTwoPassEmptyRecoveryIntegration:
         freeform_text = "안녕\n\n세계\n\n잘 가"
         # 2단계는 retry 후에도 빈 잔존 (3회 모두 빈)
         empty_json = json.dumps({"outputs": ["안녕 정렬", "", "잘 가 정렬"]}, ensure_ascii=False)
-        with patch("gurunote.llm._call_llm") as mock_solo, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_align:
+        with patch("gurunote.llm.client._call_llm") as mock_solo, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_align:
             mock_solo.return_value = freeform_text   # 1단계
             mock_align.return_value = (empty_json, "stop")
             outputs = _translate_chunk_two_pass(chunk, "", mock_cfg)
@@ -633,8 +633,8 @@ class TestTwoPassEmptyRecoveryIntegration:
         freeform_text = "안녕\n\n세계"
         empty_json = json.dumps({"outputs": ["", ""]}, ensure_ascii=False)
         log_msgs = []
-        with patch("gurunote.llm._call_llm") as mock_solo, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_align:
+        with patch("gurunote.llm.client._call_llm") as mock_solo, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_align:
             # 1단계 freeform 반환 + 3차 단독 재번역 mock (idx 1 호출 시)
             mock_solo.side_effect = [freeform_text]
             mock_align.return_value = (empty_json, "stop")
