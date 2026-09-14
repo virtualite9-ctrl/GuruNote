@@ -102,7 +102,7 @@ class TestTimeoutRetryR2:
     def test_three_consecutive_timeouts_fallback_to_timeout_marker(self):
         # R2 — 3회 모두 timeout 시 [⚠ timeout] marker 로 fallback
         cfg = self._mock_cfg()
-        with patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_call.side_effect = TimeoutError("LLM 호출 wall-clock timeout — 60.0초 초과 (B02)")
             outputs = _call_llm_with_index_mapping(
                 cfg, "prompt", expected_count=15, max_retries=3
@@ -114,7 +114,7 @@ class TestTimeoutRetryR2:
     def test_timeout_triggers_retry_not_immediate_padding(self):
         # R2 핵심 — timeout 시 즉시 padding 부재, retry 진입 (max_retries 만큼 호출)
         cfg = self._mock_cfg()
-        with patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_call.side_effect = TimeoutError("timeout")
             _call_llm_with_index_mapping(
                 cfg, "prompt", expected_count=10, max_retries=3
@@ -129,7 +129,7 @@ class TestTimeoutRetryR2:
         cfg = self._mock_cfg()
         valid_outputs = [f"item_{i}" for i in range(5)]
         valid_json = _json.dumps({"outputs": valid_outputs}, ensure_ascii=False)
-        with patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_call.side_effect = [
                 TimeoutError("timeout"),
                 (valid_json, "stop"),
@@ -147,7 +147,7 @@ class TestTimeoutRetryR2:
         cfg = self._mock_cfg()
         valid_outputs = ["a", "b", "c"]
         valid_json = _json.dumps({"outputs": valid_outputs}, ensure_ascii=False)
-        with patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_call.side_effect = [
                 TimeoutError("timeout"),
                 TimeoutError("timeout"),
@@ -162,7 +162,7 @@ class TestTimeoutRetryR2:
     def test_json_fail_then_timeout_uses_timeout_marker(self):
         # 마지막 시도가 timeout 이면 marker = [⚠ timeout] (last_error_was_timeout 추적 catch)
         cfg = self._mock_cfg()
-        with patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_call.side_effect = [
                 ("invalid json", "stop"),
                 ("invalid json", "stop"),
@@ -177,7 +177,7 @@ class TestTimeoutRetryR2:
     def test_timeout_then_json_fail_uses_translation_missing_marker(self):
         # 마지막 시도가 JSON 실패면 marker = [번역 누락] (timeout 부재로 reset 정합)
         cfg = self._mock_cfg()
-        with patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_call.side_effect = [
                 TimeoutError("timeout"),
                 ("invalid json", "stop"),

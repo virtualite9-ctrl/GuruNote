@@ -7,6 +7,53 @@
 
 ## [Unreleased]
 
+## [1.0.0.30] - 2026-09-14
+
+모듈화 2단계 (backlog B13). `gurunote/llm.py` 한 파일에 3447행, 함수 61개(public 12,
+private 49), 모듈 상수 45개가 모여 있어 무엇이 무엇에 딸린 것인지 읽어내기 어려웠다.
+
+### Changed
+
+- `gurunote/llm.py` → `gurunote/llm/` 패키지 8개 모듈. 의존 방향이 한쪽으로만 흐른다:
+  `client` → (`prompts`, `chunking`, `context`) → `entities` → `postprocess` →
+  `translate` / `summarize`. 순환 없음.
+  - `client` (513행) — provider 호출 경계. 재시도, 타임아웃, xgrammar 사전 점검.
+    실제 네트워크 호출은 이 모듈만 한다.
+  - `prompts` (329행) — system 프롬프트 본문.
+  - `chunking` (75행), `context` (98행) — 요청 단위 분할, 영상 메타데이터 블록.
+  - `entities` (947행) — entity/speaker 캐시, 통용 표기 dict, 검색 그라운딩.
+  - `postprocess` (467행) — 한자 차단, 영문 병기 검증, 연속 반복 축약.
+  - `translate` (824행), `summarize` (270행).
+- 정의 본문은 옮기기만 했다. 원본 정의 줄 3070행이 생성물에서 그대로 일치하는 것을
+  줄 단위로 대조해 확인했다 (의도한 2곳 제외).
+- 모듈을 넘는 참조는 전부 모듈 경유로 부른다 (`client._call_llm(...)`). 이름을 직접
+  import 하면 호출부에 별도 바인딩이 생겨 정의 모듈을 patch 해도 먹지 않는다. 그러면
+  테스트가 실제 엔드포인트를 호출해 멈춘다 — 분할 도중 실제로 8개 파일이 그렇게 멈췄다.
+- 테스트의 patch 표적을 정의 모듈로 맞췄다 (`gurunote.llm._call_llm` →
+  `gurunote.llm.client._call_llm` 등 86곳, `patch.object`/`setattr` 형태 포함).
+
+### Added
+
+- `gurunote/llm/_data.py` — 패키지 안 데이터 파일 위치를 한 곳에서 해석한다.
+- `tests/test_llm_package_surface.py` 41건 — 분할 중 실제로 밟은 함정 세 가지를 고정한다.
+  데이터 경로 해석, `@dataclass` 보존, 모듈 경유 patch 계약, 하위 모듈 단독 import,
+  의존 순환 부재, re-export 전량, entity 캐시 격리가 하위 모듈까지 먹는지.
+
+### Fixed
+
+- `_CJK_LOOKUP_PATH` / `_LOANWORD_FILE` 이 `Path(__file__).parent / "data"` 였다.
+  패키지로 나누면 한 단계 깊어져 `gurunote/llm/data/` 를 찾게 되므로 `_data.DATA_DIR`
+  기준으로 바꿨다. 분할하면서 생길 수 있었던 파일 부재를 테스트로 막았다.
+
+### Notes
+
+- 동작 변경 없음. `from gurunote.llm import X` 는 private 이름까지 그대로 동작한다
+  (`__init__` 이 107개 전량 re-export).
+- 전체 340건 통과 (1.0.0.29 의 299건 + 41건). 실패 0.
+- `tests/test_phase2_slow_chunk_timeout.py` 를 단독 실행하면 테스트는 1.3초에 통과하지만
+  프로세스가 바로 끝나지 않는다. `ThreadPoolExecutor` 의 긴 blocking 스레드 때문이며
+  main 에서도 같다. 이번 변경과 무관하다.
+
 ## [1.0.0.29] - 2026-09-14
 
 에이전트·스크립트가 쓸 수 있는 진입점을 만드는 모듈화 1단계. 그동안 파이프라인에
@@ -1797,7 +1844,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.29...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.30...HEAD
+[1.0.0.30]: https://github.com/avlp12/GuruNote/compare/v1.0.0.29...v1.0.0.30
 [1.0.0.29]: https://github.com/avlp12/GuruNote/compare/v1.0.0.28...v1.0.0.29
 [1.0.0.28]: https://github.com/avlp12/GuruNote/compare/v1.0.0.27...v1.0.0.28
 [1.0.0.27]: https://github.com/avlp12/GuruNote/compare/v1.0.0.26...v1.0.0.27

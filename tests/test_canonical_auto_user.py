@@ -19,7 +19,7 @@ import gurunote.llm as L
 def tmp_canonical(tmp_path, monkeypatch):
     """canonical_names.json 경로를 임시로 격리 (실제 ~/.gurunote 무변경)."""
     p = tmp_path / "canonical_names.json"
-    monkeypatch.setattr(L, "_CANONICAL_NAMES_PATH", p)
+    monkeypatch.setattr("gurunote.llm.entities._CANONICAL_NAMES_PATH", p)
     return p
 
 

@@ -162,7 +162,7 @@ class TestLoanwordLoading:
 class TestCanonicalize:
     def test_empty_cache_returns_original(self, mock_llm_config):
         result = "[00:10] 판카즈 샤르마: 본문"
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             out = _canonicalize_entity_names(result, {}, mock_llm_config)
         assert out == result
         assert mock_call.call_count == 0  # 빈 cache → LLM 호출 부재
@@ -173,7 +173,7 @@ class TestCanonicalize:
         }
         # 60000 char 초과
         big_result = "[00:10] 판카즈 샤르마: " + ("X" * 60001)
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             out = _canonicalize_entity_names(big_result, cache, mock_llm_config)
         assert out == big_result
         assert mock_call.call_count == 0  # 한계 초과 → LLM 호출 부재
@@ -183,7 +183,7 @@ class TestCanonicalize:
             "Pankaj Sharma": {"korean": "판카즈 샤르마", "type": "person", "source": "bootstrap"}
         }
         result = "[00:10] 판카지 샤르마: 본문"
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.side_effect = RuntimeError("network fail")
             out = _canonicalize_entity_names(result, cache, mock_llm_config)
         assert out == result
@@ -193,7 +193,7 @@ class TestCanonicalize:
             "Pankaj Sharma": {"korean": "판카즈 샤르마", "type": "person", "source": "bootstrap"}
         }
         result = "[00:10] 판카지 샤르마: 본문"
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = ""
             out = _canonicalize_entity_names(result, cache, mock_llm_config)
         assert out == result
@@ -205,7 +205,7 @@ class TestCanonicalize:
         # 원본 10줄, LLM 응답 5줄 (50% 차이) — 변동 큼 fallback
         result = "\n".join([f"[00:{i:02d}] 판카지 샤르마: 본문 {i}" for i in range(10)])
         truncated = "\n".join([f"[00:{i:02d}] 판카즈 샤르마: 본문 {i}" for i in range(5)])
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = truncated
             out = _canonicalize_entity_names(result, cache, mock_llm_config)
         assert out == result  # 원본 유지
@@ -216,7 +216,7 @@ class TestCanonicalize:
         }
         result = "[00:10] 판카지 샤르마: 본문 1\n\n[00:20] 판카지 샤르마: 본문 2"
         canonical = "[00:10] 판카즈 샤르마: 본문 1\n\n[00:20] 판카즈 샤르마: 본문 2"
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = canonical
             out = _canonicalize_entity_names(result, cache, mock_llm_config)
         assert out == canonical
@@ -276,7 +276,7 @@ class TestDetectUnexpectedChanges:
         # line 0 : 변경 부재. line 2 : 화자명 외 일반 단어 변경 — 의심 1건.
         canonical = "[00:10] 판카즈 샤르마: 첫 줄\n\n[00:20] 진행자: 소프트웤어 부서"
         log_messages = []
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = canonical
             out = _canonicalize_entity_names(result, cache, mock_llm_config, log_messages.append)
         # canonical 채택 catch (원본 복귀 부재)
@@ -301,7 +301,7 @@ class TestBootstrapCacheHit:
         }
         _save_entity_cache(cache_key, "Cached Video", prebuilt)
 
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             result = _bootstrap_entity_cache_from_metadata(ctx, None, mock_llm_config)
         assert mock_call.call_count == 0  # cache hit → LLM 호출 부재
         assert result == prebuilt
@@ -309,7 +309,7 @@ class TestBootstrapCacheHit:
     def test_cache_miss_calls_llm(self, mock_llm_config):
         ctx = {"title": "Fresh Video Never Cached"}
         # cache 부재 catch (autouse fixture 의 tmp 디렉토리 비어있음)
-        with patch("gurunote.llm._call_llm") as mock_call:
+        with patch("gurunote.llm.client._call_llm") as mock_call:
             mock_call.return_value = "Jensen Huang → 젠슨 황 [person]"
             result = _bootstrap_entity_cache_from_metadata(ctx, None, mock_llm_config)
         assert mock_call.call_count == 1  # cache miss → LLM 호출 1회

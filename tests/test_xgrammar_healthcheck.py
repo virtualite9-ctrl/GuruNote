@@ -45,8 +45,8 @@ def mock_cfg():
 # =============================================================================
 class TestXgrammarHealthcheck:
     def test_returns_true_on_valid_json(self, mock_cfg):
-        with patch("gurunote.llm._get_omlx_signature") as mock_sig, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._get_omlx_signature") as mock_sig, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_sig.return_value = "1779000000"
             mock_call.return_value = ('{"ok": "yes"}', "stop")
             result = _check_xgrammar_available(mock_cfg)
@@ -54,8 +54,8 @@ class TestXgrammarHealthcheck:
         assert _XGRAMMAR_CHECK_CACHE["result"] is True
 
     def test_returns_false_on_exception(self, mock_cfg):
-        with patch("gurunote.llm._get_omlx_signature") as mock_sig, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._get_omlx_signature") as mock_sig, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_sig.return_value = "1779000000"
             mock_call.side_effect = RuntimeError("xgrammar absent")
             result = _check_xgrammar_available(mock_cfg)
@@ -63,8 +63,8 @@ class TestXgrammarHealthcheck:
         assert _XGRAMMAR_CHECK_CACHE["result"] is False
 
     def test_returns_false_on_invalid_json(self, mock_cfg):
-        with patch("gurunote.llm._get_omlx_signature") as mock_sig, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._get_omlx_signature") as mock_sig, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_sig.return_value = "1779000000"
             mock_call.return_value = ("not valid json", "stop")
             result = _check_xgrammar_available(mock_cfg)
@@ -78,7 +78,7 @@ class TestXgrammarHealthcheck:
             model="claude-sonnet-4-6",
             api_key="mock",
         )
-        with patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             result = _check_xgrammar_available(cfg_anthropic)
         assert result is True
         assert mock_call.call_count == 0  # LLM 호출 부재
@@ -90,8 +90,8 @@ class TestXgrammarHealthcheck:
 class TestCacheBehavior:
     def test_cache_hit_skips_call(self, mock_cfg):
         # 1회 호출 후 같은 signature + TTL 내 → 2회 호출 시 LLM 호출 부재
-        with patch("gurunote.llm._get_omlx_signature") as mock_sig, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._get_omlx_signature") as mock_sig, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_sig.return_value = "1779000000"
             mock_call.return_value = ('{"ok": "yes"}', "stop")
             _check_xgrammar_available(mock_cfg)
@@ -102,8 +102,8 @@ class TestCacheBehavior:
 
     def test_cache_invalidate_on_signature_change(self, mock_cfg):
         # signature 변경 (omlx 재시작) → 재확인
-        with patch("gurunote.llm._get_omlx_signature") as mock_sig, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._get_omlx_signature") as mock_sig, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_sig.side_effect = ["1779000000", "1779999999"]  # 재시작
             mock_call.return_value = ('{"ok": "yes"}', "stop")
             _check_xgrammar_available(mock_cfg)
@@ -113,8 +113,8 @@ class TestCacheBehavior:
 
     def test_cache_invalidate_on_ttl_expiry(self, mock_cfg):
         # TTL 초과 → 재확인
-        with patch("gurunote.llm._get_omlx_signature") as mock_sig, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._get_omlx_signature") as mock_sig, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_sig.return_value = "1779000000"
             mock_call.return_value = ('{"ok": "yes"}', "stop")
             _check_xgrammar_available(mock_cfg)
@@ -125,8 +125,8 @@ class TestCacheBehavior:
 
     def test_signature_none_skips_cache_hit(self, mock_cfg):
         # signature None (omlx 접근 실패) 시 cache hit 부재 (재확인 진입)
-        with patch("gurunote.llm._get_omlx_signature") as mock_sig, \
-             patch("gurunote.llm._call_llm_with_continuation") as mock_call:
+        with patch("gurunote.llm.client._get_omlx_signature") as mock_sig, \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
             mock_sig.return_value = None
             mock_call.return_value = ('{"ok": "yes"}', "stop")
             _check_xgrammar_available(mock_cfg)
@@ -143,7 +143,7 @@ class TestTranslateTranscriptIntegration:
         from gurunote.types import Segment, Transcript
         seg = Segment(speaker="A", start=0.0, end=1.0, text="hello")
         transcript = Transcript(segments=[seg], language="en", engine="mlx")
-        with patch("gurunote.llm._check_xgrammar_available") as mock_check:
+        with patch("gurunote.llm.client._check_xgrammar_available") as mock_check:
             mock_check.return_value = False
             with pytest.raises(RuntimeError) as exc_info:
                 translate_transcript(transcript, config=mock_cfg)
@@ -176,7 +176,7 @@ class TestThinkingBudget:
     def test_call_llm_once_with_reason_sends_thinking_budget(self, mock_cfg):
         from gurunote.llm import _call_llm_once_with_reason
         with patch("openai.OpenAI") as mock_openai_cls, \
-             patch("gurunote.llm._call_with_wall_clock_timeout") as mock_wrap:
+             patch("gurunote.llm.client._call_with_wall_clock_timeout") as mock_wrap:
             mock_client = mock_openai_cls.return_value  # noqa: F841
             mock_resp = type("R", (), {
                 "choices": [type("C", (), {

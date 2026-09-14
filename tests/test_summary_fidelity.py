@@ -19,8 +19,8 @@ CANON = {
 
 def _patch(monkeypatch, summary_text: str):
     """요약 LLM 응답을 고정하고 통용 dict 를 주입."""
-    monkeypatch.setattr(llm, "_call_llm", lambda *a, **k: summary_text)
-    monkeypatch.setattr(llm, "_load_canonical_names", lambda: CANON)
+    monkeypatch.setattr("gurunote.llm.client._call_llm", lambda *a, **k: summary_text)
+    monkeypatch.setattr("gurunote.llm.entities._load_canonical_names", lambda: CANON)
 
 
 def test_summary_name_unified_to_dict(monkeypatch):
