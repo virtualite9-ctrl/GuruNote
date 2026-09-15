@@ -7,6 +7,28 @@
 
 ## [Unreleased]
 
+## [1.0.0.35] - 2026-09-15
+
+### Fixed
+
+- `pip install -e ".[mcp]"` 만으로는 MCP 서버가 뜨지 않았다. `gurunote.audio` 가 모듈
+  레벨에서 `yt_dlp` 를 import 하고, 서버의 import 사슬이 mcp_server → jobs → pipeline →
+  audio 로 이어지기 때문이다. 실제로 Claude Code 에 물려보다가 드러났다.
+  `[mcp]` extra 에 `yt-dlp` 를 넣었다.
+
+### Added
+
+- `tests/test_mcp_server.py` 에 2건 — extra 가 서버 import 사슬의 서드파티 의존성을 전부
+  선언하는지 검사한다. 사슬 위 모듈들의 모듈 레벨 import 를 AST 로 훑어 표준 라이브러리와
+  자기 패키지를 뺀 나머지를 extra 선언과 대조한다. 앞으로 사슬에 새 의존성이 생기면
+  선언 없이 지나가지 못한다.
+
+### Notes
+
+- 전체 410건 통과 (1.0.0.34 의 408건 + 2건).
+- 검증: 깨끗한 venv 에 `[mcp]` 만 설치해 서버 구성 성공, 실제 MCP 클라이언트로 stdio
+  연결 후 `gurunote v1.0.0.34`, 도구 10개, `app_info` 응답 확인.
+
 ## [1.0.0.34] - 2026-09-15
 
 모듈화 4단계 (backlog B13). 1~3단계로 창 없이 부를 수 있는 표면이 생겼으니, 그 위에
@@ -1973,7 +1995,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.34...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.35...HEAD
+[1.0.0.35]: https://github.com/avlp12/GuruNote/compare/v1.0.0.34...v1.0.0.35
 [1.0.0.34]: https://github.com/avlp12/GuruNote/compare/v1.0.0.33...v1.0.0.34
 [1.0.0.33]: https://github.com/avlp12/GuruNote/compare/v1.0.0.32...v1.0.0.33
 [1.0.0.32]: https://github.com/avlp12/GuruNote/compare/v1.0.0.31...v1.0.0.32

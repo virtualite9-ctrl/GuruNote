@@ -24,8 +24,13 @@ gurunote-mcp = "gurunote.mcp_server:main"
 
 [project.optional-dependencies]
 # MCP 서버용. 에이전트 연동을 안 쓰면 설치할 필요가 없다.
+#
+# yt-dlp 가 들어 있는 이유: `gurunote.audio` 가 모듈 레벨에서 import 하고,
+# mcp_server → jobs → pipeline → audio 로 이어져 서버가 뜰 때 반드시 필요하다.
+# 이것 없이 `pip install -e ".[mcp]"` 만 하면 서버가 ModuleNotFoundError 로 죽는다.
 mcp = [
     "mcp>=2.0",
+    "yt-dlp>=2024.3.10",
 ]
 
 dev = [
