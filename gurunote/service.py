@@ -30,6 +30,9 @@ _KNOWN_SETTINGS: tuple[str, ...] = (
     "GOOGLE_API_KEY", "GEMINI_MODEL",
     "LLM_TEMPERATURE",
     "LLM_TRANSLATION_MAX_TOKENS", "LLM_SUMMARY_MAX_TOKENS",
+    # 타임아웃(초). 느린 로컬 모델에서 chunk 번역·요약이 매번 timeout 으로 떨어지면 늘린다.
+    # llm/client.py 가 import 시점에 한 번 읽으므로 변경 후 앱을 다시 띄워야 반영된다.
+    "LLM_CHUNK_TIMEOUT_SEC", "LLM_HTTP_TIMEOUT_SEC",
     # STT engines + diarization
     "GURUNOTE_STT_ENGINE",
     "WHISPERX_MODEL", "WHISPERX_BATCH_SIZE",

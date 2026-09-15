@@ -7,6 +7,39 @@
 
 ## [Unreleased]
 
+## [1.0.0.33] - 2026-09-15
+
+LLM 타임아웃이 하드코딩돼 있어 느린 로컬 모델에서는 긴 영상을 처리할 수 없었다.
+`LLM_TEMPERATURE` / `LLM_TRANSLATION_MAX_TOKENS` / `LLM_SUMMARY_MAX_TOKENS` 는 이미
+환경변수인데 타임아웃 두 개만 예외였다.
+
+### Added
+
+- `LLM_CHUNK_TIMEOUT_SEC` (기본 60) / `LLM_HTTP_TIMEOUT_SEC` (기본 90) — LLM 호출 한 건에
+  허용하는 시간(초). `_positive_float_env` 로 읽는다. 0 이하나 숫자가 아닌 값은 조용히
+  기본값으로 떨어진다 — 타임아웃이 0 이면 모든 호출이 즉시 실패한다.
+- 두 키를 `service.py` 의 `_KNOWN_SETTINGS` 와 `.env.example` 에 넣었다. 설정 화면에서
+  보이고 저장된다. 비밀값이 아니므로 `_SECRET_KEYS` 에는 넣지 않았다.
+- `tests/test_llm_timeout_config.py` 17건 — 기본값 불변, 각각 독립 적용, 소수점 허용,
+  0/음수/빈값/문자열이 기본값으로 떨어지는지, `LLM_TEMPERATURE=0` 이 양수 가드에
+  막히지 않는지, 설정 목록과 `.env.example` 노출.
+
+### Notes
+
+- **기본 동작 변경 없음.** 환경변수를 주지 않으면 종전과 같은 60초 / 90초다.
+- 두 값은 import 시점에 한 번 읽는다. 바꾼 뒤에는 앱을 다시 띄워야 반영된다. README 와
+  `_KNOWN_SETTINGS` 주석에 적었다.
+- `_float_env` 에 양수 가드를 넣지 않은 이유는 `LLM_TEMPERATURE=0` 이 정당한 설정이기
+  때문이다. 타임아웃 전용으로 `_positive_float_env` 를 따로 두었다.
+- 왜 필요한지, 그리고 무엇이 아닌지: 서버를 막 재시작한 직후 8분 영상을 돌렸을 때
+  2-pass 1단계가 90초에서 4번 연속 timeout 으로 떨어졌고 요약 단계에서 작업이 실패했다.
+  같은 영상을 모델이 warm 인 상태에서 다시 돌리니 호출당 18~36초, 요약 35초로 끝났다
+  (timeout 0회, 6/6 Index Mapping 정합). 즉 **기본값 60/90 이 정상 상태에서 부족한 것은
+  아니다.** 이 항목은 cold start 와 더 느린 모델·더 큰 chunk 를 위한 여유이지, 긴 영상을
+  처리하려면 반드시 올려야 하는 값이 아니다. 실제로 올린 한도(600/700)는 한 번도
+  근처에 가지 않았다.
+- 전체 391건 통과 (1.0.0.32 의 374건 + 17건).
+
 ## [1.0.0.32] - 2026-09-14
 
 `gui.py` 와 `app_webview.py` 는 최근 네 번의 리팩터가 모두 건드렸는데, CI 에 tkinter 와
@@ -1902,7 +1935,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.32...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.33...HEAD
+[1.0.0.33]: https://github.com/avlp12/GuruNote/compare/v1.0.0.32...v1.0.0.33
 [1.0.0.32]: https://github.com/avlp12/GuruNote/compare/v1.0.0.31...v1.0.0.32
 [1.0.0.31]: https://github.com/avlp12/GuruNote/compare/v1.0.0.30...v1.0.0.31
 [1.0.0.30]: https://github.com/avlp12/GuruNote/compare/v1.0.0.29...v1.0.0.30
