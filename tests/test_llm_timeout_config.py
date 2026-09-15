@@ -81,6 +81,61 @@ class TestHelperSemantics:
         assert _positive_float_env("GURUNOTE_NO_SUCH_KEY_", 7.5) == 7.5
 
 
+class TestResolvedAtCallTimeNotImportTime:
+    """`.env` 는 진입점이 import 뒤에 읽는다 — 그때 설정한 값도 먹어야 한다.
+
+    상수는 import 시점에 한 번만 읽으므로, 여기에만 의존하면 `.env` 로 적은 타임아웃이
+    영영 반영되지 않는다. 실제로 그랬다: MCP 서버에 `.env` 로 300 을 줬는데 xgrammar
+    점검이 기본값 60 초에서 끊겼다. `gui.py` 도 `gurunote.llm` 을 먼저 import 한 뒤
+    `load_dotenv()` 를 부르므로 같은 문제였다.
+    """
+
+    def test_env_set_after_import_still_applies(self, monkeypatch):
+        from gurunote.llm import client
+
+        monkeypatch.delenv("LLM_CHUNK_TIMEOUT_SEC", raising=False)
+        monkeypatch.delenv("LLM_HTTP_TIMEOUT_SEC", raising=False)
+        assert client._chunk_timeout_sec() == client.DEFAULT_LLM_CHUNK_TIMEOUT_SEC
+        # import 이 끝난 뒤에 설정 — .env 를 나중에 읽는 상황과 같다
+        monkeypatch.setenv("LLM_CHUNK_TIMEOUT_SEC", "300")
+        monkeypatch.setenv("LLM_HTTP_TIMEOUT_SEC", "360")
+        assert client._chunk_timeout_sec() == 300.0
+        assert client._http_timeout_sec() == 360.0
+
+    def test_falls_back_to_the_module_constant_when_env_is_unset(self, monkeypatch):
+        from gurunote.llm import client
+
+        monkeypatch.delenv("LLM_CHUNK_TIMEOUT_SEC", raising=False)
+        monkeypatch.setattr(client, "DEFAULT_LLM_CHUNK_TIMEOUT_SEC", 12.5)
+        assert client._chunk_timeout_sec() == 12.5
+
+    def test_unusable_late_value_falls_back(self, monkeypatch):
+        from gurunote.llm import client
+
+        monkeypatch.setenv("LLM_CHUNK_TIMEOUT_SEC", "0")
+        assert client._chunk_timeout_sec() == client.DEFAULT_LLM_CHUNK_TIMEOUT_SEC
+
+    def test_call_sites_do_not_read_the_constant_directly(self):
+        """상수를 직접 쓰면 다시 import 시점에 묶인다."""
+        import ast
+        import pathlib as _p
+
+        source = (_p.Path(__file__).resolve().parents[1] / "gurunote/llm/client.py").read_text(
+            encoding="utf-8")
+        tree = ast.parse(source)
+        offenders = []
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if node.name in ("_chunk_timeout_sec", "_http_timeout_sec"):
+                continue
+            for inner in ast.walk(node):
+                if isinstance(inner, ast.Name) and inner.id in (
+                        "DEFAULT_LLM_CHUNK_TIMEOUT_SEC", "LLM_HTTP_TIMEOUT_SEC"):
+                    offenders.append(f"{node.name} -> {inner.id}")
+        assert offenders == [], offenders
+
+
 class TestDiscoverability:
     def test_settings_allow_list_exposes_both(self):
         from gurunote.service import _KNOWN_SETTINGS

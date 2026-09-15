@@ -7,6 +7,32 @@
 
 ## [Unreleased]
 
+## [1.0.0.37] - 2026-09-15
+
+### Fixed
+
+- `.env` 에 적은 `LLM_CHUNK_TIMEOUT_SEC` / `LLM_HTTP_TIMEOUT_SEC` 가 반영되지 않았다.
+  1.0.0.33 에서 환경변수로 읽게 했지만 **import 시점에 한 번** 읽는 구조였고, `.env` 는
+  진입점이 그 뒤에 읽어들인다. `gui.py` 도 `gurunote.llm` 을 먼저 import 한 다음
+  `load_dotenv()` 를 부르므로 같은 문제였다. 결국 프로세스 시작 전에 export 했을 때만
+  먹었고, 그게 1.0.0.33 을 검증한 방식이라 놓쳤다.
+  - MCP 서버에 `.env` 로 300 초를 줬는데 xgrammar 사전 점검이 기본값 60 초에서 끊기면서
+    드러났다.
+  - `_chunk_timeout_sec()` / `_http_timeout_sec()` 가 호출 시점마다 환경변수를 읽고,
+    없으면 기존 모듈 상수로 떨어진다. 상수를 갈아끼우는 방식도 그대로 동작한다.
+- README 와 `_KNOWN_SETTINGS` 주석의 "변경 후 앱을 다시 띄워야 반영된다" 안내를 고쳤다.
+  이제 다음 호출부터 반영된다.
+
+### Added
+
+- `tests/test_llm_timeout_config.py` 에 4건 — import 뒤에 설정한 값이 먹는지, 환경변수가
+  없을 때 모듈 상수로 떨어지는지, 뒤늦게 들어온 0 도 기본값으로 떨어지는지, 그리고 호출부가
+  상수를 직접 읽지 않는지(AST). 4건 모두 이전 커밋에서 실패한다.
+
+### Notes
+
+- 전체 423건 통과 (1.0.0.36 의 419건 + 4건).
+
 ## [1.0.0.36] - 2026-09-15
 
 ### Fixed
@@ -2021,7 +2047,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.36...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.37...HEAD
+[1.0.0.37]: https://github.com/avlp12/GuruNote/compare/v1.0.0.36...v1.0.0.37
 [1.0.0.36]: https://github.com/avlp12/GuruNote/compare/v1.0.0.35...v1.0.0.36
 [1.0.0.35]: https://github.com/avlp12/GuruNote/compare/v1.0.0.34...v1.0.0.35
 [1.0.0.34]: https://github.com/avlp12/GuruNote/compare/v1.0.0.33...v1.0.0.34
