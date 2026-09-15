@@ -19,8 +19,15 @@ dependencies = [
 [project.scripts]
 # UI 없이 파이프라인을 돌리는 진입점. 사람이 터미널에서, 에이전트가 --json 으로 쓴다.
 gurunote = "gurunote.cli:main"
+# MCP 서버 (stdio). mcp 패키지가 필요하므로 [mcp] extra 를 함께 설치해야 한다.
+gurunote-mcp = "gurunote.mcp_server:main"
 
 [project.optional-dependencies]
+# MCP 서버용. 에이전트 연동을 안 쓰면 설치할 필요가 없다.
+mcp = [
+    "mcp>=2.0",
+]
+
 dev = [
     "pytest>=9.0",
     # tests/test_xgrammar_healthcheck.py 가 `patch("openai.OpenAI")` 로 클라이언트를
@@ -32,6 +39,8 @@ dev = [
     "yt-dlp>=2024.3.10",
     # gui.py 가 모듈 레벨에서 dotenv 를 import 한다. 진입점 import 검사에 필요하다.
     "python-dotenv>=1.0",
+    # MCP 도구 등록·호출을 테스트에서 실제로 확인한다.
+    "mcp>=2.0",
 ]
 
 # pytest 설정은 pytest.ini 가 source-of-truth (중복 방지).
