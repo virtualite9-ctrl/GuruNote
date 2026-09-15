@@ -32,6 +32,7 @@ __all__ = [
     '_get_omlx_signature',
     '_check_xgrammar_available',
     'test_connection',
+    '_positive_float_env',
     'DEFAULT_LLM_CHUNK_TIMEOUT_SEC',
     'LLM_HTTP_TIMEOUT_SEC',
     '_call_with_wall_clock_timeout',
@@ -126,6 +127,20 @@ def _float_env(key: str, default: float) -> float:
         return float(os.environ.get(key, "").strip())
     except Exception:  # noqa: BLE001
         return default
+
+
+def _positive_float_env(key: str, default: float) -> float:
+    """0 이하가 의미 없는 값(타임아웃) 전용.
+
+    `_float_env` 에 양수 가드를 넣지 않는 이유는 `LLM_TEMPERATURE=0` 이 정당한
+    설정이기 때문이다. 잘못된 입력과 0 이하는 조용히 기본값으로 떨어진다 —
+    타임아웃이 0 이면 모든 호출이 즉시 실패한다.
+    """
+    try:
+        value = float(os.environ.get(key, "").strip())
+    except Exception:  # noqa: BLE001
+        return default
+    return value if value > 0 else default
 
 
 _log = logging.getLogger(__name__)
@@ -355,10 +370,13 @@ def test_connection(config: Optional[LLMConfig] = None) -> str:
     return text.strip()
 
 
-DEFAULT_LLM_CHUNK_TIMEOUT_SEC = 60.0
+# chunk 한 건에 허용하는 wall-clock 상한 (B02). 로컬 모델이 느리면 늘린다.
+# 프로세스 시작 시 한 번 읽는다 — 값을 바꾸면 앱을 다시 띄워야 반영된다.
+DEFAULT_LLM_CHUNK_TIMEOUT_SEC = _positive_float_env("LLM_CHUNK_TIMEOUT_SEC", 60.0)
 
 
-LLM_HTTP_TIMEOUT_SEC = 90.0
+# HTTP read timeout. wall-clock 상한과 이중 안전장치로 함께 쓴다.
+LLM_HTTP_TIMEOUT_SEC = _positive_float_env("LLM_HTTP_TIMEOUT_SEC", 90.0)
 
 
 def _call_with_wall_clock_timeout(fn, timeout_sec: float, *args, **kwargs):

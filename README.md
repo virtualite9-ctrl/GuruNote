@@ -297,6 +297,20 @@ GURUNOTE_STT_ENGINE=auto
 
 ### 파이프라인 동작 제어 (선택 환경변수)
 
+`LLM_CHUNK_TIMEOUT_SEC` (기본 60) / `LLM_HTTP_TIMEOUT_SEC` (기본 90) — LLM 호출 한 건에
+허용하는 시간(초)입니다. 로컬 모델이 느리면 chunk 번역과 요약이 매번 timeout 으로 떨어져
+품질이 낮은 fallback 결과가 나옵니다. 그럴 때 늘리세요.
+
+언제 올리나: 로그에 `⚠ 2-pass 1단계 timeout` 이 반복되면 모델이 시간 안에 못 끝내는
+것입니다. 다만 **먼저 모델을 한 번 warm up 해보세요.** 서버를 막 띄운 직후에는 같은
+작업이 몇 배 느릴 수 있습니다. 실측 예로, 재시작 직후에는 12 세그먼트 chunk 가 90초를
+넘겨 4번 연속 실패했지만, warm 상태에서는 같은 영상이 호출당 18~36초로 끝났습니다.
+warm 상태에서도 계속 timeout 이 난다면 그때 늘리는 것이 맞습니다.
+
+0 이하나 숫자가 아닌 값은 조용히 기본값으로 떨어집니다. 두 값 모두 프로세스 시작 시
+한 번만 읽으므로 바꾼 뒤에는 앱을 다시 띄워야 합니다.
+
+
 아래 변수는 `.env` 에 추가하거나 실행 전 셸에서 설정합니다. 미설정 시 괄호 안 값이 기본값입니다.
 
 | 변수 | 기본값 | 설명 |
@@ -570,7 +584,7 @@ GuruNote/
 주요 변경 사항은 [CHANGELOG.md](./CHANGELOG.md) 에 [Keep a Changelog](https://keepachangelog.com/)
 형식으로 기록되며 버전은 [Semantic Versioning](https://semver.org/) 을 따릅니다.
 
-현재 버전: **v1.0.0.32** — 진입점(`gui.py`, `app_webview.py`) import 스모크 검사를 CI 에 추가했습니다. 기능 변경은 없습니다.
+현재 버전: **v1.0.0.33** — LLM 타임아웃을 환경변수(`LLM_CHUNK_TIMEOUT_SEC` / `LLM_HTTP_TIMEOUT_SEC`)로 조절할 수 있게 했습니다. 기본값은 종전과 같은 60초 / 90초입니다.
 
 ### v1.0.0.0 주요 변경 (요약)
 
