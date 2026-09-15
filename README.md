@@ -99,6 +99,9 @@ bash run_web.sh              # Streamlit (macOS/Linux), Windows 는 run_web.bat
 
 ## ✨ 주요 기능
 
+- 🤖 **에이전트 연동 (MCP)** — `gurunote-mcp` 로 MCP 서버를 띄우면 도구 10개
+  (`note_start` / `note_status` / `history` / `search` / `export_obsidian` 등)를 노출합니다.
+  노트 생성은 오래 걸리므로 job 을 시작하고 상태를 물어보는 형태입니다.
 - ⌨️ **UI 없는 실행 (CLI)** — `gurunote note <URL|파일>` 로 창을 띄우지 않고 파이프라인 실행.
   `--json` 은 결과를 기계가 읽는 형태로 내보내므로 스크립트나 에이전트가 그대로 쓸 수 있음.
   파이썬에서는 `from gurunote.pipeline import run_pipeline` 으로 호출.
@@ -407,6 +410,35 @@ print(svc.list_history(limit=5))
 print(svc.get_settings())        # 비밀값은 평문으로 반환하지 않음
 ```
 
+### MCP 서버 — 에이전트 연동
+
+```bash
+pip install -e ".[mcp]"
+gurunote-mcp                    # stdio
+python -m gurunote.mcp_server   # 동일
+```
+
+MCP 클라이언트 설정 예시:
+
+```json
+{
+  "mcpServers": {
+    "gurunote": { "command": "gurunote-mcp" }
+  }
+}
+```
+
+도구 10개: `note_start` `note_status` `note_stop` `note_jobs` `history`
+`history_detail` `search` `export_obsidian` `settings` `app_info`.
+
+노트 생성은 영상 길이만큼 걸리므로 한 번의 호출로 붙잡지 않습니다. `note_start` 가
+즉시 `job_id` 를 돌려주고, `note_status` 로 `progress` 와 `log_tail` 을 확인합니다.
+완료 후 본문이 필요하면 `note_status(job_id, include_note=true)` 를 씁니다.
+
+`settings` 는 비밀값을 **설정 여부만** 돌려줍니다. 값 자체는 나오지 않습니다.
+
+에이전트용 사용 지침은 `skills/gurunote/SKILL.md` 에 있습니다.
+
 ### 옛 진입점 — v0.8 호환 (유지)
 
 새 UI 가 동작하지 않거나 옛 인터페이스가 필요한 경우 아래 진입점이 그대로 동작합니다. 파이프라인 코어 (`gurunote/`) 는 셋 다 공유합니다.
@@ -513,7 +545,9 @@ GuruNote/
 │   ├── __init__.py
 │   ├── __main__.py             # `python -m gurunote` 진입점
 │   ├── cli.py                  # 명령줄 인터페이스 (note / history / search / settings / engines / providers)
-│   ├── service.py              # 창 없는 조작 표면 — bridge 와 CLI 가 공유
+│   ├── service.py              # 창 없는 조작 표면 — bridge·CLI·MCP 가 공유
+│   ├── jobs.py                 # 창 없는 작업 레지스트리 (백그라운드 파이프라인)
+│   ├── mcp_server.py           # MCP 서버 (도구 10개)
 │   ├── pipeline.py             # 파이프라인 동기 실행 API (run_pipeline)
 │   ├── options.py              # STT 엔진 / LLM provider 목록의 단일 출처
 │   ├── types.py                # Segment / Transcript 공통 데이터클래스
@@ -584,7 +618,7 @@ GuruNote/
 주요 변경 사항은 [CHANGELOG.md](./CHANGELOG.md) 에 [Keep a Changelog](https://keepachangelog.com/)
 형식으로 기록되며 버전은 [Semantic Versioning](https://semver.org/) 을 따릅니다.
 
-현재 버전: **v1.0.0.33** — LLM 타임아웃을 환경변수(`LLM_CHUNK_TIMEOUT_SEC` / `LLM_HTTP_TIMEOUT_SEC`)로 조절할 수 있게 했습니다. 기본값은 종전과 같은 60초 / 90초입니다.
+현재 버전: **v1.0.0.34** — MCP 서버(`gurunote-mcp`)와 에이전트용 `skills/gurunote/SKILL.md` 를 추가했습니다. 창 없이 파이프라인을 돌리는 작업 레지스트리도 함께 들어왔습니다.
 
 ### v1.0.0.0 주요 변경 (요약)
 

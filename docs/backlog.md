@@ -24,7 +24,11 @@
   동작 29개 이전. `Api` 는 이를 상속하고 window 배선 + 대화상자 4개만 유지 — JS 표면 불변.
   CLI 에 `history` / `search` / `settings` 를 붙여 같은 함수 객체를 호출하는 것을 확인했다.
   `tests/test_service_layer.py` 26건 추가. 366건 통과.
-- 4단계 not_started: 3단계 서비스 위에 SKILL.md 또는 MCP 서버.
+- 4단계 **완료** (9/15, v1.0.0.34): `gurunote/mcp_server.py` 도구 10개 + `gurunote/jobs.py`
+  (창 없는 작업 레지스트리) + `skills/gurunote/SKILL.md`. 실제 MCP 클라이언트로 stdio
+  연결·도구 호출 확인. `tests/test_mcp_server.py` 17건. 408건 통과.
+- B13 전체 완료. 남은 것: 노트 생성이 영상 길이만큼 걸리는 것은 구조적 한계이므로,
+  에이전트는 job 을 띄우고 나중에 확인하는 사용법을 따라야 한다 (SKILL.md 에 기재).
 - 우선순위: P1 (진입점이 늘어날수록 중복·드리프트 비용이 커짐)
 
 ### Phase 5: STT 의미 단위 재분할 + 2-pass default on

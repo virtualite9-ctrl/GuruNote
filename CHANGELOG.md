@@ -7,6 +7,44 @@
 
 ## [Unreleased]
 
+## [1.0.0.34] - 2026-09-15
+
+모듈화 4단계 (backlog B13). 1~3단계로 창 없이 부를 수 있는 표면이 생겼으니, 그 위에
+에이전트가 쓰는 층을 얹는다.
+
+### Added
+
+- `gurunote/mcp_server.py` — MCP 서버. 도구 10개: `note_start` `note_status` `note_stop`
+  `note_jobs` `history` `history_detail` `search` `export_obsidian` `settings` `app_info`.
+  `GuruNoteService` 와 `JobRegistry` 에 위임만 하고 로직을 두지 않는다.
+  `gurunote-mcp` 또는 `python -m gurunote.mcp_server` 로 띄운다 (stdio).
+- `gurunote/jobs.py` — 창 없는 작업 레지스트리. `webui/session.py` 의 세션은 진행 상황을
+  webview 이벤트 버스로 밀어넣어 창이 있어야 하고, 그래서 `stop_pipeline` /
+  `get_pipeline_status` 도 창에 묶여 있었다. 여기서는 `run_pipeline` 을 스레드에서 돌리고
+  로그·진행률·결과를 모아 `job_id` 로 물어보게 한다.
+  - 노트 생성은 영상 길이만큼 걸린다. 한 번의 MCP 호출로 붙잡지 않으려고 나눴다.
+  - `stop()` 은 워커를 붙잡아 두고 `request_stop()` 을 부른다. 상태만 바꾸고 마는 흉내가
+    아니다. 다만 다음 단계 경계에서 멈추므로 즉시 끊기지는 않는다.
+  - 로그는 500줄로 제한한다. 스레드에서 예외가 나도 `status="failed"` 로 남긴다.
+- `skills/gurunote/SKILL.md` — 에이전트용 사용 지침. 도구 호출 순서, 오래 걸린다는 점,
+  실패 시 `pipeline_job_id` 로 로그를 찾는 법, 비밀값을 캐묻지 않는 것.
+- `[mcp]` optional-dependency 와 `gurunote-mcp` 스크립트. 에이전트 연동을 안 쓰면 설치할
+  필요가 없다.
+- `tests/test_mcp_server.py` 17건 — 도구 등록과 설명 존재, 잘못된 입력을 시작 전에 거르는지
+  (작업이 남지 않아야 한다), `note_start` 가 작업을 붙잡지 않는지, 본문을 요청할 때만
+  돌려주는지, 러너가 죽어도 상태로 남는지, 로그 상한, `clear_finished` 가 실행 중 작업을
+  남기는지, 설정에 비밀값이 새지 않는지.
+
+### Notes
+
+- 실제 MCP 클라이언트로 stdio 연결을 확인했다 — `initialize` → `gurunote v1.0.0.34`,
+  `list_tools` 10개, `call_tool` 4건 정상 응답.
+- 잘못된 입력은 `JobRegistry.start` 가 **동기적으로** `ValueError` 를 낸다. 스레드 안에서
+  터지게 두면 호출자가 폴링할 때까지 모르고 쓰레기 작업만 남는다 — 구현 중 실제로 그렇게
+  동작해서 고쳤다.
+- 파이프라인 동작 변경 없음. 기존 진입점(GUI / React / CLI)도 그대로다.
+- 전체 408건 통과 (1.0.0.33 의 391건 + 17건). mcp 미설치 환경에서는 해당 파일이 skip 된다.
+
 ## [1.0.0.33] - 2026-09-15
 
 LLM 타임아웃이 하드코딩돼 있어 느린 로컬 모델에서는 긴 영상을 처리할 수 없었다.
@@ -1935,7 +1973,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.33...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.34...HEAD
+[1.0.0.34]: https://github.com/avlp12/GuruNote/compare/v1.0.0.33...v1.0.0.34
 [1.0.0.33]: https://github.com/avlp12/GuruNote/compare/v1.0.0.32...v1.0.0.33
 [1.0.0.32]: https://github.com/avlp12/GuruNote/compare/v1.0.0.31...v1.0.0.32
 [1.0.0.31]: https://github.com/avlp12/GuruNote/compare/v1.0.0.30...v1.0.0.31
