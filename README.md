@@ -618,7 +618,7 @@ GuruNote/
 주요 변경 사항은 [CHANGELOG.md](./CHANGELOG.md) 에 [Keep a Changelog](https://keepachangelog.com/)
 형식으로 기록되며 버전은 [Semantic Versioning](https://semver.org/) 을 따릅니다.
 
-현재 버전: **v1.0.0.34** — MCP 서버(`gurunote-mcp`)와 에이전트용 `skills/gurunote/SKILL.md` 를 추가했습니다. 창 없이 파이프라인을 돌리는 작업 레지스트리도 함께 들어왔습니다.
+현재 버전: **v1.0.0.35** — `[mcp]` extra 만으로 MCP 서버가 뜨지 않던 문제를 고쳤습니다.
 
 ### v1.0.0.0 주요 변경 (요약)
 

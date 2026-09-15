@@ -223,6 +223,52 @@ class TestSecretsDoNotLeak:
         assert set(values) & set(_SECRET_KEYS) == set()
 
 
+class TestMcpExtraIsSufficient:
+    """`pip install -e ".[mcp]"` 만으로 서버가 떠야 한다.
+
+    처음 올렸을 때 이 extra 에 `mcp` 만 넣어서, 실제로 물려보니
+    `gurunote.audio` 의 모듈 레벨 `import yt_dlp` 에서 죽었다. import 사슬은
+    mcp_server → jobs → pipeline → audio 로 이어진다.
+    """
+
+    def _extra(self, name: str) -> list[str]:
+        text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        block = text.split(f"{name} = [", 1)[1].split("]", 1)[0]
+        return [line.strip().strip('",\'') for line in block.splitlines()
+                if line.strip() and not line.strip().startswith("#")]
+
+    def test_extra_declares_every_module_level_dependency_of_the_import_chain(self):
+        declared = " ".join(self._extra("mcp")).lower()
+        # 서버가 뜰 때 반드시 import 되는 서드파티
+        for required in ("mcp", "yt-dlp"):
+            assert required in declared, f"{required} 가 [mcp] extra 에 없다: {declared}"
+
+    def test_import_chain_has_no_undeclared_third_party_module(self):
+        """사슬 위 모듈들의 모듈 레벨 import 를 훑어 선언과 대조한다."""
+        import ast
+
+        declared = " ".join(self._extra("mcp") + ["pyyaml"]).lower().replace("-", "_")
+        third_party = set()
+        for name in ("mcp_server", "jobs", "pipeline", "audio", "options",
+                     "pipeline_worker", "service"):
+            path = ROOT / "gurunote" / f"{name}.py"
+            if not path.is_file():
+                continue
+            for node in ast.parse(path.read_text(encoding="utf-8")).body:
+                if isinstance(node, ast.Import):
+                    third_party |= {a.name.split(".")[0] for a in node.names}
+                elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                    third_party.add(node.module.split(".")[0])
+        import sys
+
+        external = {
+            m for m in third_party
+            if m not in sys.stdlib_module_names and m not in ("gurunote", "__future__")
+        }
+        missing = sorted(m for m in external if m.replace("-", "_") not in declared)
+        assert missing == [], f"[mcp] extra 에 없는 모듈 레벨 의존성: {missing}"
+
+
 class TestSkillDocument:
     def test_skill_file_has_frontmatter_and_names_the_tools(self):
         text = (ROOT / "skills/gurunote/SKILL.md").read_text(encoding="utf-8")
