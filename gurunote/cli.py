@@ -178,6 +178,10 @@ def _run_settings(args: argparse.Namespace) -> int:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    # 설정 화면이 저장한 .env 를 읽는다. 실제 환경변수가 파일보다 우선한다.
+    from gurunote.settings import load_env  # noqa: PLC0415
+
+    load_env()
     args = build_parser().parse_args(argv)
     if args.command == "note":
         return _run_note(args)

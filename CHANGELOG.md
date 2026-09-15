@@ -7,6 +7,32 @@
 
 ## [Unreleased]
 
+## [1.0.0.36] - 2026-09-15
+
+### Fixed
+
+- CLI 와 MCP 서버가 `.env` 를 읽지 않았다. `gui.py` / `app.py` / `app_webview.py` 는 각자
+  모듈 레벨에서 `load_dotenv()` 를 부르지만 두 진입점은 그러지 않아, 설정 화면이 저장한
+  값을 통째로 무시했다. README 와 `.env.example` 이 안내하는 설정 방법이 이 경로에서는
+  동작하지 않았다는 뜻이다. MCP 서버를 실제 클라이언트에 물려보다가 드러났다.
+- `python-dotenv` 를 `[project] dependencies` 로 선언했다. UI 진입점이 이미 모듈 레벨에서
+  import 하고 있어 사실상 기본 의존성이었는데 선언만 빠져 있었다.
+
+### Added
+
+- `gurunote.settings.load_env()` — `ENV_PATH` 의 `.env` 를 읽는다. 기본적으로 이미 설정된
+  환경변수를 덮어쓰지 않는다 (실제 환경 > 파일). `cli.main` 과 `mcp_server.main` 이 부른다.
+  - `load_dotenv()` 를 인자 없이 부르지 않는 이유: 현재 작업 디렉터리에서 위로 훑는
+    방식이라, 클라이언트가 임의의 디렉터리에서 띄우는 MCP 서버에는 쓸 수 없다. 설정이
+    실제로 저장되는 경로를 직접 가리킨다.
+- `tests/test_env_loading.py` 9건 — 두 진입점이 `load_env` 를 부르는지, `.env` 값이 실제로
+  적용되는지, 실제 환경변수가 파일을 이기는지, 파일이 없어도 죽지 않는지, 그리고 엉뚱한
+  디렉터리의 `.env` 를 집어오지 않는지. 8건이 이전 커밋에서 실패한다.
+
+### Notes
+
+- 전체 419건 통과 (1.0.0.35 의 410건 + 9건).
+
 ## [1.0.0.35] - 2026-09-15
 
 ### Fixed
@@ -1995,7 +2021,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.35...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.36...HEAD
+[1.0.0.36]: https://github.com/avlp12/GuruNote/compare/v1.0.0.35...v1.0.0.36
 [1.0.0.35]: https://github.com/avlp12/GuruNote/compare/v1.0.0.34...v1.0.0.35
 [1.0.0.34]: https://github.com/avlp12/GuruNote/compare/v1.0.0.33...v1.0.0.34
 [1.0.0.33]: https://github.com/avlp12/GuruNote/compare/v1.0.0.32...v1.0.0.33
