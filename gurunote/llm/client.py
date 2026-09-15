@@ -33,6 +33,8 @@ __all__ = [
     '_check_xgrammar_available',
     'test_connection',
     '_positive_float_env',
+    '_chunk_timeout_sec',
+    '_http_timeout_sec',
     'DEFAULT_LLM_CHUNK_TIMEOUT_SEC',
     'LLM_HTTP_TIMEOUT_SEC',
     '_call_with_wall_clock_timeout',
@@ -238,9 +240,9 @@ def _call_llm_once(config: LLMConfig, system: str, user: str, max_tokens: int) -
                 {"role": "user", "content": user},
             ],
             extra_body={"thinking_budget": 0},
-            timeout=LLM_HTTP_TIMEOUT_SEC,
+            timeout=_http_timeout_sec(),
         )
-    resp = _call_with_wall_clock_timeout(_create, LLM_HTTP_TIMEOUT_SEC)
+    resp = _call_with_wall_clock_timeout(_create, _http_timeout_sec())
     return (resp.choices[0].message.content or "").strip()
 
 
@@ -379,6 +381,19 @@ DEFAULT_LLM_CHUNK_TIMEOUT_SEC = _positive_float_env("LLM_CHUNK_TIMEOUT_SEC", 60.
 LLM_HTTP_TIMEOUT_SEC = _positive_float_env("LLM_HTTP_TIMEOUT_SEC", 90.0)
 
 
+# 위 두 상수는 import 시점에 한 번 읽는다. 그런데 `.env` 는 진입점이 나중에 읽어들이므로
+# (`gui.py` 도 gurunote.llm 을 먼저 import 한 뒤 load_dotenv 를 부른다) 파일에 적은 값이
+# 상수에 반영될 방법이 없었다. 환경변수를 프로세스 시작 전에 export 했을 때만 먹었다.
+# 그래서 호출 시점에 다시 읽는다. 환경변수가 없으면 위 상수를 그대로 쓰므로, 상수를
+# 갈아끼우는 기존 방식(테스트 포함)도 그대로 동작한다.
+def _chunk_timeout_sec() -> float:
+    return _positive_float_env("LLM_CHUNK_TIMEOUT_SEC", DEFAULT_LLM_CHUNK_TIMEOUT_SEC)
+
+
+def _http_timeout_sec() -> float:
+    return _positive_float_env("LLM_HTTP_TIMEOUT_SEC", LLM_HTTP_TIMEOUT_SEC)
+
+
 def _call_with_wall_clock_timeout(fn, timeout_sec: float, *args, **kwargs):
     """sync 함수를 별 thread 에서 실행 + wall-clock timeout 강제 (B02).
 
@@ -461,7 +476,7 @@ def _call_llm_once_with_reason(
         "extra_body": {"thinking_budget": 0},
         # HTTP-level read timeout (5/23 수정) — batch 응답에서 정확 작동 (stream=False catch).
         # ThreadPool wrapper 결합으로 이중 안전장치.
-        "timeout": LLM_HTTP_TIMEOUT_SEC,
+        "timeout": _http_timeout_sec(),
     }
     if response_format:
         kwargs["response_format"] = response_format
@@ -473,7 +488,7 @@ def _call_llm_once_with_reason(
     # 5/23 수정: manual shutdown(wait=False) 적용 — timeout 시 caller 즉시 raise.
     resp = _call_with_wall_clock_timeout(
         client.chat.completions.create,
-        DEFAULT_LLM_CHUNK_TIMEOUT_SEC,
+        _chunk_timeout_sec(),
         **kwargs,
     )
     choice = resp.choices[0]
