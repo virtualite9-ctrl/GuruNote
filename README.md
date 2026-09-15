@@ -618,7 +618,7 @@ GuruNote/
 주요 변경 사항은 [CHANGELOG.md](./CHANGELOG.md) 에 [Keep a Changelog](https://keepachangelog.com/)
 형식으로 기록되며 버전은 [Semantic Versioning](https://semver.org/) 을 따릅니다.
 
-현재 버전: **v1.0.0.35** — `[mcp]` extra 만으로 MCP 서버가 뜨지 않던 문제를 고쳤습니다.
+현재 버전: **v1.0.0.36** — CLI 와 MCP 서버가 `.env` 를 읽지 않던 문제를 고쳤습니다. 설정 화면에서 저장한 값이 이제 두 경로에도 적용됩니다.
 
 ### v1.0.0.0 주요 변경 (요약)
 

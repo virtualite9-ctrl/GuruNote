@@ -160,6 +160,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--transport", default="stdio",
                         choices=["stdio", "sse", "streamable-http"])
     args = parser.parse_args(argv)
+    # 클라이언트가 임의의 디렉터리에서 띄우므로, 설정이 저장되는 경로를 직접 읽는다.
+    from gurunote.settings import load_env  # noqa: PLC0415
+
+    load_env()
     build_server().run(transport=args.transport)
     return 0
 
