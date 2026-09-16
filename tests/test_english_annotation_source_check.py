@@ -56,3 +56,42 @@ def test_empty_inputs_safe():
 def test_no_overcorrection_of_present_name():
     """소스에 정확히 있는 단일 토큰은 fuzzy 교정 경로로 빠지지 않는다."""
     assert fix("앤트로픽(Anthropic)", SRC) == "앤트로픽(Anthropic)"
+
+
+class TestSubstringIsNotWordEvidence:
+    """토큰이 소스 단어의 **일부**일 뿐인 경우.
+
+    `corpus_lower` 는 소스 전문을 이어붙인 문자열이라 `in` 이 부분 문자열 검사가 된다.
+    병기 "(Gen AI)" 의 토큰 "Gen" 은 소스의 "generative" 안에 들어 있어 통과했지만,
+    케이싱 복원 맵은 온전한 단어로만 만들어져 "gen" 키가 없었다 → KeyError 로 작업 전체가
+    죽었다. 실제 영상("Attention mechanism: Overview")에서 5분을 돌린 뒤 이 지점에서
+    실패했다.
+    """
+
+    CORPUS = "Today we talk about generative AI and the attention mechanism."
+
+    def test_partial_word_token_does_not_crash(self):
+        out = fix("생성형 인공지능(Gen AI)이 온다", self.CORPUS)
+        assert isinstance(out, str)
+        assert "생성형 인공지능" in out
+
+    def test_partial_word_token_is_not_accepted_as_evidence(self):
+        """"Gen" 은 소스에 단어로 없다 → 규칙 3 에 따라 병기를 생략한다."""
+        out = fix("생성형 인공지능(Gen AI)이 온다", self.CORPUS)
+        assert "(Gen AI)" not in out
+        assert "(gen" not in out.lower()
+
+    def test_whole_word_evidence_still_works(self):
+        out = fix("어텐션(Attention) 메커니즘", self.CORPUS)
+        assert "attention" in out.lower()
+
+    def test_various_partial_prefixes_are_safe(self):
+        """소스 단어의 앞부분을 잘라 만든 토큰들 — 전부 죽지 않아야 한다."""
+        for annotation in ("Gen AI", "Att Mechanism", "Mech AI", "Tod AI"):
+            out = fix(f"어떤 한국어 말({annotation})이다", self.CORPUS)
+            assert isinstance(out, str), annotation
+
+    def test_single_token_partial_is_also_safe(self):
+        """단일 토큰 경로(규칙 2)는 difflib 만 쓰므로 원래 안전하지만 함께 고정한다."""
+        out = fix("생성(Gen)이다", self.CORPUS)
+        assert isinstance(out, str)
