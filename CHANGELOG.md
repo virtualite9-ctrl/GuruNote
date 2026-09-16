@@ -7,6 +7,31 @@
 
 ## [Unreleased]
 
+## [1.0.0.38] - 2026-09-16
+
+### Fixed
+
+- 영문 병기 소스 검증(`_correct_english_annotations`)이 `KeyError` 로 작업 전체를 죽였다.
+  다단어 병기의 토큰 근거를 `t.lower() in corpus_lower` 로 확인하는데, `corpus_lower` 는
+  소스 전문을 이어붙인 **문자열**이라 이 `in` 이 부분 문자열 검사가 된다. 병기 "(Gen AI)"
+  의 토큰 "Gen" 은 소스의 "generative" 안에 들어 있어 통과하지만, 케이싱 복원 맵은 온전한
+  단어로만 만들어져 "gen" 키가 없다.
+  - 토큰 판정을 단어 사전(`case_map`) 직접 조회로 바꿨다. 판정 기준이 "소스에 단어로
+    존재하는가" 이므로 원래 의도와도 맞는다.
+  - 실제 영상("Attention mechanism: Overview", 5분 34초)을 MCP 로 돌리다 번역을 다 마친
+    뒤 이 지점에서 실패해 드러났다. 로그에는 `[Error] 'gen'` 만 남아 원인을 알기 어려웠다.
+  - 규칙 자체는 그대로다: 소스에 단어 근거가 없는 병기는 생략한다(규칙 3).
+
+### Added
+
+- `tests/test_english_annotation_source_check.py` 에 5건 — 부분 문자열 토큰이 죽지 않는지,
+  근거로 채택되지 않는지, 온전한 단어는 여전히 유지되는지, 소스 단어의 앞부분을 잘라 만든
+  여러 토큰이 안전한지. 3건이 이전 커밋에서 `KeyError` 로 실패한다.
+
+### Notes
+
+- 전체 428건 통과 (1.0.0.37 의 423건 + 5건).
+
 ## [1.0.0.37] - 2026-09-15
 
 ### Fixed
@@ -2047,7 +2072,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.37...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.38...HEAD
+[1.0.0.38]: https://github.com/avlp12/GuruNote/compare/v1.0.0.37...v1.0.0.38
 [1.0.0.37]: https://github.com/avlp12/GuruNote/compare/v1.0.0.36...v1.0.0.37
 [1.0.0.36]: https://github.com/avlp12/GuruNote/compare/v1.0.0.35...v1.0.0.36
 [1.0.0.35]: https://github.com/avlp12/GuruNote/compare/v1.0.0.34...v1.0.0.35

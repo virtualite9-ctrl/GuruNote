@@ -339,7 +339,12 @@ def _correct_english_annotations(
         # 3) 다단어 → 토큰별 소스 근거(정확/최근접) 전부 확보 시만 채택.
         fixed = []
         for t in toks:
-            if t.lower() in corpus_lower:
+            # `corpus_lower` 는 소스 전문을 이어붙인 문자열이라 `in` 이 부분 문자열
+            # 검사가 된다. 토큰 "Gen" 은 소스의 "generative" 안에 들어 있어 통과하지만,
+            # `case_map` 은 온전한 단어로만 만들어져 "gen" 키가 없다 → KeyError.
+            # ("생성형 인공지능(Gen AI)" 같은 병기에서 실제로 작업이 죽었다.)
+            # 토큰 단위 판정에는 단어 사전을 직접 본다.
+            if t.lower() in case_map:
                 fixed.append(case_map[t.lower()])
             else:
                 mm = difflib.get_close_matches(t.lower(), pool_lower, n=1, cutoff=0.84)
