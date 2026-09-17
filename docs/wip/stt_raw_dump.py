@@ -62,7 +62,7 @@ def main() -> None:
                 print(f"  word[0] keys: {list(w0[0].keys())}, sample: {w0[0]}")
 
         # diarization (community-1)
-        from gurunote.stt_mlx import _diarize_with_pyannote
+        from gurunote.stt.mlx import _diarize_with_pyannote
         def log(m): print(f"    {m}")
         t0 = time.time()
         hf_token = os.environ.get("HUGGINGFACE_TOKEN", "")

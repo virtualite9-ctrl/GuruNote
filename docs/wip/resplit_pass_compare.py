@@ -47,7 +47,7 @@ RESPLIT_JSON = OUT_DIR / "community1_3speakers_resplit.json"
 
 
 def build_transcript_from_raw_segs(segs: List[dict], turns: List[dict]) -> Transcript:
-    """raw STT segments → Transcript (화자 재할당 + noise 필터, stt_mlx.py 동일 path)."""
+    """raw STT segments → Transcript (화자 재할당 + noise 필터, stt/mlx.py 동일 path)."""
     NOISE = {"", ".", "-", "—", "...", "…"}
 
     def normalize(raw):

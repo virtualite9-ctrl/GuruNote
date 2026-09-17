@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import pytest
 
-from gurunote.stt_mlx import (
+from gurunote.stt.mlx import (
     SEGMENT_RESPLIT_ENV,
     _segment_is_complete,
     _segment_last_token,
@@ -198,7 +198,7 @@ class TestSegmentResplitEnv:
     def test_env_default_on(self, monkeypatch):
         """env 부재 시 default on 처리 (== '1')."""
         monkeypatch.delenv(SEGMENT_RESPLIT_ENV, raising=False)
-        # stt_mlx.py 안 토글 — env 부재 시 "1" default (5/24 default on 전환).
+        # stt/mlx.py 안 토글 — env 부재 시 "1" default (5/24 default on 전환).
         val = os.environ.get(SEGMENT_RESPLIT_ENV, "1").strip()
         assert val == "1"
 

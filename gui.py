@@ -53,7 +53,7 @@ from gurunote.hardware import (
     label_to_key as hw_label_to_key,
 )
 from gurunote.stt import install_whisperx, is_whisperx_installed
-from gurunote.stt_mlx import is_apple_silicon
+from gurunote.stt.mlx import is_apple_silicon
 from gurunote.thumbnails import (
     cached_thumbnail_path, download_thumbnail_async, extract_youtube_id,
 )

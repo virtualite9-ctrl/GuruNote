@@ -37,7 +37,7 @@ os.environ["GURUNOTE_SEGMENT_RESPLIT"] = "1"
 os.environ["GURUNOTE_TWO_PASS"] = "1"
 
 from gurunote.audio import download_audio
-from gurunote.stt_mlx import transcribe_mlx
+from gurunote.stt.mlx import transcribe_mlx
 from gurunote.llm import LLMConfig, translate_transcript
 
 VIDEOS = [
