@@ -13,7 +13,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from gurunote import llm
-from gurunote.exporter import build_original_script_section
+from gurunote.export.exporter import build_original_script_section
 from gurunote.llm import (
     LLMConfig,
     _compute_cache_key_from_title,

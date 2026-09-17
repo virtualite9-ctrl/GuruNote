@@ -33,7 +33,9 @@ from gurunote.audio import (
     extract_audio_from_file,
     is_probably_youtube_url,
 )
-from gurunote.exporter import autosave_result, build_gurunote_markdown, sanitize_filename
+from gurunote.export.exporter import (
+    autosave_result, build_gurunote_markdown, sanitize_filename,
+)
 from gurunote.llm import (
     LLMConfig, extract_metadata, summarize_translation,
     test_connection, translate_transcript,

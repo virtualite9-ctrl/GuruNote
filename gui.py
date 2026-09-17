@@ -37,7 +37,7 @@ from gurunote.audio import (
     is_probably_youtube_url,
     is_supported_local_file,
 )
-from gurunote.exporter import sanitize_filename
+from gurunote.export.exporter import sanitize_filename
 from gurunote.llm import LLMConfig, test_connection
 from gurunote.options import LLM_PROVIDERS, STT_ENGINES
 from gurunote.settings import save_settings
@@ -57,16 +57,16 @@ from gurunote.stt.mlx import is_apple_silicon
 from gurunote.thumbnails import (
     cached_thumbnail_path, download_thumbnail_async, extract_youtube_id,
 )
-from gurunote.pdf_export import is_pdf_export_available, markdown_to_pdf
-from gurunote import pdf_installer
-from gurunote.obsidian import (
+from gurunote.export.pdf_export import is_pdf_export_available, markdown_to_pdf
+from gurunote.export import pdf_installer
+from gurunote.export.obsidian import (
     find_vault_candidates,
     is_obsidian_vault,
     resolve_subfolder as obsidian_subfolder,
     resolve_vault_path as obsidian_vault,
     save_to_vault as obsidian_save,
 )
-from gurunote.notion_sync import (
+from gurunote.export.notion_sync import (
     is_notion_sync_available,
     missing_packages_hint as notion_missing_hint,
     save_to_notion as notion_save,
@@ -1373,7 +1373,7 @@ class HistoryDialog(ctk.CTkToplevel):
         if not md:
             messagebox.showinfo("없음", "마크다운 파일이 없습니다.")
             return
-        from gurunote.exporter import sanitize_filename
+        from gurunote.export.exporter import sanitize_filename
         path = filedialog.asksaveasfilename(
             title="마크다운 저장", defaultextension=".md",
             filetypes=[("Markdown", "*.md")],
@@ -1395,7 +1395,7 @@ class HistoryDialog(ctk.CTkToplevel):
             return
 
         def _do_save() -> None:
-            from gurunote.exporter import sanitize_filename
+            from gurunote.export.exporter import sanitize_filename
             path = filedialog.asksaveasfilename(
                 title="PDF 저장", defaultextension=".pdf",
                 filetypes=[("PDF", "*.pdf")],
@@ -1425,7 +1425,7 @@ class HistoryDialog(ctk.CTkToplevel):
             messagebox.showinfo("없음", "마크다운 파일이 없습니다.")
             return
 
-        from gurunote.exporter import sanitize_filename
+        from gurunote.export.exporter import sanitize_filename
         filename = f"GuruNote_{sanitize_filename(title)}.md"
 
         def _do_save(vault: Path) -> None:

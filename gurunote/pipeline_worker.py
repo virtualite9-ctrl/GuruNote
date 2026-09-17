@@ -21,7 +21,7 @@ from typing import Optional
 
 from gurunote import semantic as semantic_search
 from gurunote.audio import cleanup_dir, download_audio, extract_audio_from_file
-from gurunote.exporter import autosave_result, build_gurunote_markdown
+from gurunote.export.exporter import autosave_result, build_gurunote_markdown
 from gurunote.history import JobLogger, new_job_id, save_job
 from gurunote.llm import (
     LLMConfig,
