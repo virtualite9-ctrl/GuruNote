@@ -618,7 +618,7 @@ GuruNote/
 주요 변경 사항은 [CHANGELOG.md](./CHANGELOG.md) 에 [Keep a Changelog](https://keepachangelog.com/)
 형식으로 기록되며 버전은 [Semantic Versioning](https://semver.org/) 을 따릅니다.
 
-현재 버전: **v1.0.0.38** — 영문 병기 검증이 `(Gen AI)` 같은 병기에서 KeyError 로 작업 전체를 죽이던 버그를 고쳤습니다.
+현재 버전: **v1.0.0.39** — 영문 병기 검증이 `(Gen AI)` 같은 병기에서 KeyError 로 작업 전체를 죽이던 버그를 고쳤습니다.
 
 ### v1.0.0.0 주요 변경 (요약)
 
