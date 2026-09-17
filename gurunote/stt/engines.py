@@ -4,7 +4,7 @@ Step 2: 음성 인식 + 화자 분리 (Speaker Diarization).
 엔진 선택 우선순위 (`auto` 모드):
   1. NVIDIA GPU (CUDA) → **WhisperX** (Distil-Whisper + pyannote).
      청크 분할 처리로 VRAM ~6GB 에서 안정 동작.
-  2. Apple Silicon (M1~M5) → **MLX Whisper** (`gurunote.stt_mlx`).
+  2. Apple Silicon (M1~M5) → **MLX Whisper** (`gurunote.stt.mlx`).
      Metal/MPS 가속, pyannote 화자 분리도 MPS 에서 실행.
   3. 위 둘 다 안 되면 → **AssemblyAI Cloud API** 로 폴백.
 
@@ -83,7 +83,7 @@ def transcribe(
         return result
 
     if engine == "mlx":
-        from gurunote.stt_mlx import transcribe_mlx
+        from gurunote.stt.mlx import transcribe_mlx
         result = transcribe_mlx(audio_path, log=log, hotwords=hotwords)
         _assert_transcript_not_empty(result)
         return result
@@ -105,7 +105,7 @@ def transcribe(
     elif _is_mlx_ready():
         try:
             log("[auto] Apple Silicon 감지 — MLX Whisper 로 전사를 시도합니다.")
-            from gurunote.stt_mlx import transcribe_mlx
+            from gurunote.stt.mlx import transcribe_mlx
             result = transcribe_mlx(audio_path, log=log, hotwords=hotwords)
             _assert_transcript_not_empty(result)
             return result
@@ -123,7 +123,7 @@ def transcribe(
 def _is_mlx_ready() -> bool:
     """Apple Silicon + mlx-whisper 패키지 설치 확인."""
     try:
-        from gurunote.stt_mlx import is_mlx_ready
+        from gurunote.stt.mlx import is_mlx_ready
         return is_mlx_ready()
     except Exception:  # noqa: BLE001
         return False

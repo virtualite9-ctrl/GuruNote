@@ -139,7 +139,7 @@ def resplit_segments(raw_segs: List[Dict], turns: List[Dict]) -> Tuple[List[Dict
     Returns: (resplit_segments, merge_log)
     merge_log: [{indices: [i, i+1, ...], reason, original_count}]
     """
-    # 1차: noise 필터 (stt_mlx.py 동일)
+    # 1차: noise 필터 (stt/mlx.py 동일)
     NOISE = {"", ".", "-", "—", "...", "…"}
     filtered = []
     for s in raw_segs:

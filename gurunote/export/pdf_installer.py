@@ -206,7 +206,7 @@ def run_plan(plan: InstallPlan, log: ProgressFn) -> bool:
             return False
 
     # 검증 — import 뿐 아니라 실제 cffi native 로드까지 smoke-test
-    from gurunote.pdf_export import is_pdf_export_available
+    from gurunote.export.pdf_export import is_pdf_export_available
     if not is_pdf_export_available(force_recheck=True):
         log(
             "\n[경고] 설치 커맨드는 성공했지만 weasyprint 가 여전히 동작하지 않습니다.\n"

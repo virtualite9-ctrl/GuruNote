@@ -111,7 +111,7 @@ def compute_facets(jobs: list[dict]) -> dict[str, list[FacetNode]]:
 
 
 # =============================================================================
-# UI state 영속화 (Phase 2 — load/save 는 ui_state.py)
+# UI state 영속화 (Phase 2 — load/save 는 gurunote/ui/state.py)
 # =============================================================================
 def default_expand_state() -> dict[str, bool]:
     """기본 4 facet 모두 펼침."""

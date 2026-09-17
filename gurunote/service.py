@@ -46,7 +46,7 @@ _KNOWN_SETTINGS: tuple[str, ...] = (
     "GURUNOTE_OBSIDIAN_AUTOEXPORT",
     "NOTION_TOKEN", "NOTION_PARENT_ID", "NOTION_PARENT_TYPE",
     # Processing options (불리언 토글 — "1"=on / "0"=off, 미설정 시 백엔드 default on).
-    # llm.py:2811(GURUNOTE_TWO_PASS) / stt_mlx.py(GURUNOTE_SEGMENT_RESPLIT) 가
+    # llm.py:2811(GURUNOTE_TWO_PASS) / stt/mlx.py(GURUNOTE_SEGMENT_RESPLIT) 가
     # os.environ 을 읽으므로 키 추가만으로 저장/로드/반영 (백엔드 로직 무변).
     "GURUNOTE_TWO_PASS", "GURUNOTE_SEGMENT_RESPLIT",
 )
@@ -173,7 +173,7 @@ def _obsidian_note_stem(title: str) -> str:
     파일명과 링크 stem 이 항상 일치한다 (그래프 연결 보장). 출처 구분은 파일명
     접두사 대신 frontmatter ``gurunote_job_id`` 표식 + 하위 폴더(``Gurunote/``)가
     담당하므로 접두사를 붙이지 않는다."""
-    from gurunote.exporter import sanitize_filename  # noqa: PLC0415
+    from gurunote.export.exporter import sanitize_filename  # noqa: PLC0415
     return sanitize_filename(title)
 
 def _inject_frontmatter_field(md: str, key: str, value: str) -> str:
@@ -898,7 +898,7 @@ class GuruNoteService:
         # 라이브러리 삭제는 이미 성공 — vault 삭제 실패는 막지 않고 결과에만 기록.
         result = {"ok": True, "job_id": job_id, "vault_deleted": 0}
         try:
-            from gurunote.obsidian import delete_from_vault  # noqa: PLC0415
+            from gurunote.export.obsidian import delete_from_vault  # noqa: PLC0415
             result["vault_deleted"] = len(delete_from_vault(job_id))
         except Exception as exc:  # noqa: BLE001
             result["vault_error"] = f"{type(exc).__name__}: {exc}"
@@ -914,7 +914,7 @@ class GuruNoteService:
         if not isinstance(job_id, str) or not job_id:
             return {"ok": True, "has_copy": False, "count": 0}
         try:
-            from gurunote.obsidian import find_vault_copies  # noqa: PLC0415
+            from gurunote.export.obsidian import find_vault_copies  # noqa: PLC0415
             n = len(find_vault_copies(job_id))
         except Exception:  # noqa: BLE001
             n = 0

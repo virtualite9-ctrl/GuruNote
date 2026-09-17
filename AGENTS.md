@@ -1,4 +1,7 @@
-# Claude Code 작업 규칙
+# 코딩 에이전트 작업 규칙 (AGENTS.md)
+
+이 파일은 Claude Code 를 포함한 모든 코딩 에이전트(opencode, Codex, Cursor 등)가
+따르는 저장소 공용 규칙이다. [agents.md](https://agents.md) 표준을 따른다.
 
 ## 버전 정책 (Semantic Versioning + Revision)
 
@@ -38,7 +41,7 @@
   - 사용자가 즉시 체감할 새 기능 / UI → MINOR
 
 - **버전을 전혀 올리지 않는 경우:**
-  - `CLAUDE.md` / `.github/` 워크플로우 단독 수정
+  - `AGENTS.md` / `.github/` 워크플로우 단독 수정
   - 공백/포매팅만 변경 (내용 불변)
   - 이 경우에도 명시적 판단이 필요; 애매하면 REVISION 올림.
 

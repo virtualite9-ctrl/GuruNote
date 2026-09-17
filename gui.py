@@ -37,7 +37,7 @@ from gurunote.audio import (
     is_probably_youtube_url,
     is_supported_local_file,
 )
-from gurunote.exporter import sanitize_filename
+from gurunote.export.exporter import sanitize_filename
 from gurunote.llm import LLMConfig, test_connection
 from gurunote.options import LLM_PROVIDERS, STT_ENGINES
 from gurunote.settings import save_settings
@@ -53,20 +53,20 @@ from gurunote.hardware import (
     label_to_key as hw_label_to_key,
 )
 from gurunote.stt import install_whisperx, is_whisperx_installed
-from gurunote.stt_mlx import is_apple_silicon
+from gurunote.stt.mlx import is_apple_silicon
 from gurunote.thumbnails import (
     cached_thumbnail_path, download_thumbnail_async, extract_youtube_id,
 )
-from gurunote.pdf_export import is_pdf_export_available, markdown_to_pdf
-from gurunote import pdf_installer
-from gurunote.obsidian import (
+from gurunote.export.pdf_export import is_pdf_export_available, markdown_to_pdf
+from gurunote.export import pdf_installer
+from gurunote.export.obsidian import (
     find_vault_candidates,
     is_obsidian_vault,
     resolve_subfolder as obsidian_subfolder,
     resolve_vault_path as obsidian_vault,
     save_to_vault as obsidian_save,
 )
-from gurunote.notion_sync import (
+from gurunote.export.notion_sync import (
     is_notion_sync_available,
     missing_packages_hint as notion_missing_hint,
     save_to_notion as notion_save,
@@ -78,7 +78,7 @@ from gurunote.search import (
 from gurunote.stats import compute_stats, render_report
 from gurunote import semantic as semantic_search
 from gurunote.nav_tree import FacetNode, compute_facets, default_expand_state
-from gurunote.ui_state import (
+from gurunote.ui.state import (
     get_nav_expand, load_ui_state, save_ui_state, set_nav_expand,
 )
 from gurunote.types import _format_ts
@@ -88,8 +88,8 @@ from gurunote.updater import (
     update_project,
 )
 from gurunote.app_icon import get_app_icon_path
-from gurunote import ui_components as uc
-from gurunote import ui_theme as ut
+from gurunote.ui import components as uc
+from gurunote.ui import theme as ut
 
 # 환경변수 로드
 load_dotenv()
@@ -1373,7 +1373,7 @@ class HistoryDialog(ctk.CTkToplevel):
         if not md:
             messagebox.showinfo("없음", "마크다운 파일이 없습니다.")
             return
-        from gurunote.exporter import sanitize_filename
+        from gurunote.export.exporter import sanitize_filename
         path = filedialog.asksaveasfilename(
             title="마크다운 저장", defaultextension=".md",
             filetypes=[("Markdown", "*.md")],
@@ -1395,7 +1395,7 @@ class HistoryDialog(ctk.CTkToplevel):
             return
 
         def _do_save() -> None:
-            from gurunote.exporter import sanitize_filename
+            from gurunote.export.exporter import sanitize_filename
             path = filedialog.asksaveasfilename(
                 title="PDF 저장", defaultextension=".pdf",
                 filetypes=[("PDF", "*.pdf")],
@@ -1425,7 +1425,7 @@ class HistoryDialog(ctk.CTkToplevel):
             messagebox.showinfo("없음", "마크다운 파일이 없습니다.")
             return
 
-        from gurunote.exporter import sanitize_filename
+        from gurunote.export.exporter import sanitize_filename
         filename = f"GuruNote_{sanitize_filename(title)}.md"
 
         def _do_save(vault: Path) -> None:
@@ -3043,7 +3043,7 @@ class GuruNoteApp(ctk.CTk):
         # macOS Cmd+C/V/X/A 명시 바인딩 (Toplevel 포함 전역 적용)
         _install_clipboard_shortcuts(self)
         # Non-blocking 토스트 매니저 (저장 성공 등 소소한 피드백용)
-        from gurunote.ui_toast import ToastManager as _ToastManager
+        from gurunote.ui.toast import ToastManager as _ToastManager
         self._toast = _ToastManager(self)
         self._build_ui()
 
@@ -3088,7 +3088,7 @@ class GuruNoteApp(ctk.CTk):
             ).grid(row=2 + i, column=0, padx=10, pady=2, sticky="ew")
 
         ctk.CTkLabel(
-            sb, text="v1.0.0.38", font=ctk.CTkFont(size=10), text_color=C_TEXT_DIM,
+            sb, text="v1.0.0.39", font=ctk.CTkFont(size=10), text_color=C_TEXT_DIM,
         ).grid(row=7, column=0, padx=20, pady=(0, 16), sticky="sw")
 
     # ── 메인 영역 ────────────────────────────────────────────

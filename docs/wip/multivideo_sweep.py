@@ -100,7 +100,7 @@ def stt_raw_dump(video_id: str, video_dir: Path) -> Dict:
         print(f"  [STT] {time.time()-t0:.0f}s, {len(raw_segs)} segments")
 
         print(f"  [DIAR] community-1…")
-        from gurunote.stt_mlx import _diarize_with_pyannote
+        from gurunote.stt.mlx import _diarize_with_pyannote
         hf_token = os.environ.get("HUGGINGFACE_TOKEN", "")
         try:
             t0 = time.time()

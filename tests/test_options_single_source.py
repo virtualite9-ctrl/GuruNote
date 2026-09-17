@@ -47,7 +47,7 @@ class TestCanonicalValues:
             assert all(v and v.strip() == v for v in values)
 
     def test_stt_docstring_in_the_engine_module_still_lists_the_same_engines(self):
-        source = (ROOT / 'gurunote/stt.py').read_text(encoding='utf-8')
+        source = (ROOT / 'gurunote/stt/__init__.py').read_text(encoding='utf-8')
         for engine in STT_ENGINES:
             assert engine in source, engine
 

@@ -10,13 +10,13 @@ GuruNote Toast 알림 매니저
 ---------
 - **non-blocking**: 메인 스레드의 `after()` 로 자동 dismiss, UI 블록 없음.
 - **스택 가능**: 여러 개 동시 호출 시 세로로 쌓임 (최신이 위).
-- **레벨별 색상**: info(기본) / success / warning / error — `ui_theme` 사용.
+- **레벨별 색상**: info(기본) / success / warning / error — `gurunote.ui.theme` 사용.
 - **root 에 바인딩**: 한 앱당 하나의 `ToastManager` 인스턴스 — 재사용.
 
 사용 예시
 ---------
     from gurunote.ui_toast import ToastManager
-    from gurunote import ui_components  # noqa (참고용)
+    from gurunote.ui import components  # noqa (참고용)
 
     # 앱 init 에서 한 번만:
     toast = ToastManager(self)
@@ -31,7 +31,7 @@ from typing import List, Optional
 
 import customtkinter as ctk
 
-from gurunote import ui_theme as ut
+from gurunote.ui import theme as ut
 
 # 레벨별 배경/텍스트 색상 맵
 _LEVEL_COLORS = {

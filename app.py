@@ -33,7 +33,9 @@ from gurunote.audio import (
     extract_audio_from_file,
     is_probably_youtube_url,
 )
-from gurunote.exporter import autosave_result, build_gurunote_markdown, sanitize_filename
+from gurunote.export.exporter import (
+    autosave_result, build_gurunote_markdown, sanitize_filename,
+)
 from gurunote.llm import (
     LLMConfig, extract_metadata, summarize_translation,
     test_connection, translate_transcript,
@@ -47,7 +49,7 @@ from gurunote import semantic as semantic_search
 from gurunote.nav_tree import compute_facets
 from gurunote.stats import compute_stats, render_report
 from gurunote.stt import install_whisperx, is_whisperx_installed, transcribe
-from gurunote.stt_mlx import is_apple_silicon
+from gurunote.stt.mlx import is_apple_silicon
 from gurunote.types import Transcript, _format_ts
 from gurunote.updater import check_updates, update_project
 

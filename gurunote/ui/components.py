@@ -9,14 +9,14 @@ factory 함수로 추출. Phase 1a 에서는 정의만 하고 `gui.py` 는 아�
 설계 원칙
 ---------
 - **단일 책임**: 각 factory 는 위젯 하나만 반환.
-- **토큰 의존**: 직접 색상/픽셀 리터럴 금지 — `ui_theme` 의 상수만 사용.
+- **토큰 의존**: 직접 색상/픽셀 리터럴 금지 — `gurunote.ui.theme` 의 상수만 사용.
 - **customtkinter 위젯 반환**: 추가 세팅(`.grid(...)` 등) 은 호출자가 결정.
 - **kwargs pass-through**: customtkinter 의 남은 옵션은 `**kwargs` 로 위임.
 
 사용 예시
 ---------
-    from gurunote import ui_components as uic
-    from gurunote import ui_theme as ut
+    from gurunote.ui import components as uic
+from gurunote.ui import theme as ut
 
     btn = uic.button(parent, text="저장", variant=ut.BTN_PRIMARY,
                      command=on_save)
@@ -34,7 +34,7 @@ from typing import Callable, Optional
 
 import customtkinter as ctk
 
-from gurunote import ui_theme as ut
+from gurunote.ui import theme as ut
 
 
 # =============================================================================
@@ -88,7 +88,7 @@ def button(
 ) -> ctk.CTkButton:
     """변형 기반 버튼 factory.
 
-    `variant` 는 `ui_theme.BTN_*` 중 하나. 알 수 없는 값이면 secondary 폴백.
+    `variant` 는 `theme.BTN_*` 중 하나. 알 수 없는 값이면 secondary 폴백.
 
     추가 kwargs 는 `CTkButton` 으로 그대로 전달 (e.g. `state`, `image`).
     """
@@ -167,7 +167,7 @@ def section_header(
 # Status pill — 작업 상태 표시 (완료 / 실패 / 처리 중 / 대기)
 # =============================================================================
 def status_pill(parent, *, status: str) -> ctk.CTkLabel:
-    """상태 pill. `status` 는 `ui_theme.STATUS_COLORS` 의 key 중 하나.
+    """상태 pill. `status` 는 `theme.STATUS_COLORS` 의 key 중 하나.
 
     알 수 없는 status 면 "대기" 스타일로 폴백 (silent).
     """

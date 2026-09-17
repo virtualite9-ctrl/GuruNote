@@ -29,7 +29,7 @@ for line in open("/Users/gesicht/GuruNote/.env").read().splitlines():
 sys.path.insert(0, "/Users/gesicht/GuruNote")
 from gurunote.types import Segment, Transcript
 from gurunote.llm import LLMConfig, translate_transcript, chunk_segments
-from gurunote.stt_mlx import (
+from gurunote.stt.mlx import (
     _resplit_segments_by_semantics,
     _assign_speaker_by_overlap,
     _normalize_speaker_label,
@@ -63,7 +63,7 @@ def restore_cache(bak):
 def build_transcript_from_raw(raw_segs: List[dict], turns: List[dict],
                                 resplit_on: bool) -> Transcript:
     """통합 본체 path 재현: raw segments → (재분할 on 시 _resplit_segments_by_semantics)
-    → noise/dedup loop (stt_mlx.py 동일) → Transcript (raw={"segment_resplit": resplit_on}).
+    → noise/dedup loop (stt/mlx.py 동일) → Transcript (raw={"segment_resplit": resplit_on}).
     """
     NOISE = {"", ".", "-", "—", "...", "…"}
 

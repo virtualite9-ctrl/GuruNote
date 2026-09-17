@@ -7,6 +7,23 @@
 
 ## [Unreleased]
 
+## [1.0.0.39] - 2026-09-18
+
+### Changed
+
+- 평평했던 모듈을 하위 패키지로 묶어 구조를 정리했다 (동작 불변):
+  - `stt.py`/`stt_mlx.py` → `gurunote/stt/` (`engines.py`, `mlx.py`)
+  - `export_*.py` 5종 → `gurunote/export/`
+  - `ui_theme.py`/`ui_components.py`/`ui_toast.py`/`ui_state.py` → `gurunote/ui/`
+    (`theme.py`, `components.py`, `toast.py`, `state.py`)
+- 각 패키지 `__init__.py` 는 기존 공개 이름을 전부 re-export 하는 얇은 표면.
+  하위 모듈 간 의존은 패키지 내부 경로(`gurunote.ui.theme` 등)로 직접 참조.
+- 표면 고정 테스트 추가(`test_stt_package_surface.py`,
+  `test_export_package_surface.py`, `test_ui_package_surface.py`) — 공개 이름,
+  패치 대상 경로, 하위 모듈 구성을 회귀 방지용으로 고정.
+- 에이전트 규칙 파일을 `CLAUDE.md` → `AGENTS.md` 로 이관. 내용은 버전·커밋
+  정책 그대로, Claude Code 전용 표기를 범용 에이전트 표준(agents.md)으로 바꿨다.
+
 ## [1.0.0.38] - 2026-09-16
 
 ### Fixed
@@ -2073,6 +2090,7 @@ bash run_desktop.sh
   override 로 request-local 하게 주입.
 
 [Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.38...HEAD
+[1.0.0.39]: https://github.com/avlp12/GuruNote/compare/v1.0.0.38...v1.0.0.39
 [1.0.0.38]: https://github.com/avlp12/GuruNote/compare/v1.0.0.37...v1.0.0.38
 [1.0.0.37]: https://github.com/avlp12/GuruNote/compare/v1.0.0.36...v1.0.0.37
 [1.0.0.36]: https://github.com/avlp12/GuruNote/compare/v1.0.0.35...v1.0.0.36

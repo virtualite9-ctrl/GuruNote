@@ -69,7 +69,7 @@ def translate_transcript(
         )
 
     # 5/24 — STT 의미 단위 재분할 적용 시 chunk size 자동 축소.
-    # transcript.raw["segment_resplit"]=True (stt_mlx.py 토글 on) → cs=12, char_limit=2000.
+    # transcript.raw["segment_resplit"]=True (stt/mlx.py 토글 on) → cs=12, char_limit=2000.
     # off → 기존 (cs=15, char_limit=12000) — daily 1-pass 동작 보존.
     resplit_applied = bool(getattr(transcript, "raw", None)
                             and transcript.raw.get("segment_resplit"))
