@@ -78,7 +78,7 @@ from gurunote.search import (
 from gurunote.stats import compute_stats, render_report
 from gurunote import semantic as semantic_search
 from gurunote.nav_tree import FacetNode, compute_facets, default_expand_state
-from gurunote.ui_state import (
+from gurunote.ui.state import (
     get_nav_expand, load_ui_state, save_ui_state, set_nav_expand,
 )
 from gurunote.types import _format_ts
@@ -88,8 +88,8 @@ from gurunote.updater import (
     update_project,
 )
 from gurunote.app_icon import get_app_icon_path
-from gurunote import ui_components as uc
-from gurunote import ui_theme as ut
+from gurunote.ui import components as uc
+from gurunote.ui import theme as ut
 
 # 환경변수 로드
 load_dotenv()
@@ -3043,7 +3043,7 @@ class GuruNoteApp(ctk.CTk):
         # macOS Cmd+C/V/X/A 명시 바인딩 (Toplevel 포함 전역 적용)
         _install_clipboard_shortcuts(self)
         # Non-blocking 토스트 매니저 (저장 성공 등 소소한 피드백용)
-        from gurunote.ui_toast import ToastManager as _ToastManager
+        from gurunote.ui.toast import ToastManager as _ToastManager
         self._toast = _ToastManager(self)
         self._build_ui()
 
