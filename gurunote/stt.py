@@ -1,14 +1,14 @@
 """
-Step 2: 음성 인식 + 화자 분리 (Speaker Diarization).
+Step 2: 음성 인식 (선택적으로 화자 분리).
 
 엔진 선택 우선순위 (`auto` 모드):
-  1. NVIDIA GPU (CUDA) → **WhisperX** (Distil-Whisper + pyannote).
-     청크 분할 처리로 VRAM ~6GB 에서 안정 동작.
+  1. NVIDIA GPU (CUDA) → **Faster-Whisper** (CTranslate2, 화자 미분리).
   2. Apple Silicon (M1~M5) → **MLX Whisper** (`gurunote.stt_mlx`).
      Metal/MPS 가속, pyannote 화자 분리도 MPS 에서 실행.
-  3. 위 둘 다 안 되면 → **AssemblyAI Cloud API** 로 폴백.
+  3. 둘 다 사용할 수 없거나 전사 실패 시 오류. CPU/클라우드 폴백 없음.
 
-세 엔진 모두 결과를 `gurunote.types.Transcript` 형태로 정규화해 반환하므로
+WhisperX (정렬/화자 분리), AssemblyAI (클라우드)는 명시적으로 선택한다.
+모든 엔진은 결과를 `gurunote.types.Transcript` 형태로 정규화해 반환하므로
 LLM/요약 단계는 어느 엔진을 썼는지 신경 쓰지 않아도 된다.
 """
 
@@ -29,6 +29,7 @@ if platform.system() == "Windows":
     os.environ.setdefault("HUGGINGFACE_HUB_SYMLINK_WARNING", "0")
 from typing import Callable, List, Optional
 
+from gurunote.options import STT_ENGINES
 from gurunote.types import Segment, Transcript
 
 ProgressFn = Callable[[str], None]
@@ -61,11 +62,11 @@ def transcribe(
     stop_event: Optional[object] = None,
 ) -> Transcript:
     """
-    오디오 파일을 화자 분리된 Transcript 로 변환한다.
+    오디오 파일을 Transcript 로 변환한다 (faster-whisper 는 화자 미분리).
 
     Args:
         audio_path: 로컬 오디오 파일 경로
-        engine: "whisperx" | "mlx" | "assemblyai" | "auto"
+        engine: "faster-whisper" | "whisperx" | "mlx" | "assemblyai" | "auto"
         progress: 진행 메시지 콜백
         hotwords: 도메인 핫워드. None 이면 IT_AI_HOTWORDS 기본값 사용.
         stop_event: 중지 이벤트 (GUI 의 threading.Event)
@@ -75,7 +76,19 @@ def transcribe(
     """
     log = progress or (lambda _msg: None)
     engine = (engine or "auto").lower().strip()
+    if stop_event is not None and stop_event.is_set():
+        raise RuntimeError("사용자가 작업 중지를 요청했습니다.")
+    if engine not in STT_ENGINES:
+        raise ValueError(f"지원하지 않는 STT 엔진: {engine}")
     hotwords = hotwords if hotwords is not None else IT_AI_HOTWORDS
+
+    if engine == "faster-whisper":
+        from gurunote.stt_faster_whisper import transcribe_faster_whisper
+        result = transcribe_faster_whisper(
+            audio_path, log=log, hotwords=hotwords, stop_event=stop_event,
+        )
+        _assert_transcript_not_empty(result)
+        return result
 
     if engine == "whisperx":
         result = _transcribe_whisperx(audio_path, log=log, hotwords=hotwords)
@@ -93,29 +106,26 @@ def transcribe(
         _assert_transcript_not_empty(result)
         return result
 
-    # auto 라우팅: CUDA WhisperX → Apple Silicon MLX → AssemblyAI
-    if _check_cuda_ready():
-        try:
-            log("[auto] NVIDIA GPU 감지 — WhisperX 로 전사를 시도합니다.")
-            result = _transcribe_whisperx(audio_path, log=log, hotwords=hotwords)
-            _assert_transcript_not_empty(result)
-            return result
-        except Exception as exc:  # noqa: BLE001
-            log(f"WhisperX 실패 ({exc}). 다음 엔진으로 폴백합니다.")
-    elif _is_mlx_ready():
-        try:
-            log("[auto] Apple Silicon 감지 — MLX Whisper 로 전사를 시도합니다.")
-            from gurunote.stt_mlx import transcribe_mlx
-            result = transcribe_mlx(audio_path, log=log, hotwords=hotwords)
-            _assert_transcript_not_empty(result)
-            return result
-        except Exception as exc:  # noqa: BLE001
-            log(f"MLX Whisper 실패 ({exc}). AssemblyAI 로 폴백합니다.")
-    else:
-        hint = _auto_fallback_hint()
-        log(f"[auto] 로컬 GPU STT 미사용{hint} — AssemblyAI Cloud API 로 직행합니다.")
+    # auto 는 로컬 GPU만 선택한다. 실패해도 CPU/클라우드로 전환하지 않는다.
+    from gurunote.stt_faster_whisper import is_cuda_ready, transcribe_faster_whisper
 
-    result = _transcribe_assemblyai(audio_path, log=log)
+    if is_cuda_ready():
+        log("[auto] NVIDIA GPU 감지 — Faster-Whisper CUDA 로 전사합니다.")
+        result = transcribe_faster_whisper(
+            audio_path, log=log, hotwords=hotwords, stop_event=stop_event,
+        )
+    elif _is_mlx_ready():
+        log("[auto] Apple Silicon 감지 — MLX Whisper 로 전사합니다.")
+        from gurunote.stt_mlx import transcribe_mlx
+        result = transcribe_mlx(audio_path, log=log, hotwords=hotwords)
+    else:
+        raise RuntimeError(
+            "사용 가능한 로컬 GPU STT가 없습니다. "
+            "NVIDIA: requirements-faster-whisper.txt 및 CUDA 12/cuDNN 9, "
+            "Apple Silicon: requirements-mac.txt 설치를 확인하세요. "
+            "auto는 CPU/클라우드로 전환하지 않습니다. "
+            "클라우드 업로드를 원할 때만 assemblyai를 명시적으로 선택하세요."
+        )
     _assert_transcript_not_empty(result)
     return result
 
@@ -128,22 +138,6 @@ def _is_mlx_ready() -> bool:
     except Exception:  # noqa: BLE001
         return False
 
-
-def _auto_fallback_hint() -> str:
-    """auto 라우팅이 AssemblyAI 로 떨어질 때 사용자 안내 문구."""
-    if _has_nvidia_gpu():
-        return (
-            " (CUDA PyTorch 미설치.\n"
-            "  터미널: pip install torch --index-url "
-            "https://download.pytorch.org/whl/cu128)"
-        )
-    import platform
-    if platform.system() == "Darwin" and platform.machine() == "arm64":
-        return (
-            " (Apple Silicon 감지됐으나 mlx-whisper 미설치.\n"
-            "  터미널: pip install -r requirements-mac.txt)"
-        )
-    return ""
 
 
 def _assert_transcript_not_empty(transcript: Transcript) -> None:
@@ -209,15 +203,6 @@ def _has_nvidia_gpu() -> bool:
     """nvidia-smi 가 존재하면 NVIDIA GPU 가 있다고 판단."""
     import shutil
     return shutil.which("nvidia-smi") is not None
-
-
-def _check_cuda_ready() -> bool:
-    """torch.cuda 가 사용 가능한지 확인."""
-    try:
-        import torch
-        return torch.cuda.is_available()
-    except Exception:  # noqa: BLE001
-        return False
 
 
 def _ensure_model_local(model_name: str, log: ProgressFn) -> str:

@@ -1,0 +1,4 @@
+# Direct NVIDIA CUDA STT; no PyTorch, WhisperX or pyannote required.
+# CUDA 12 cuBLAS + cuDNN 9 must be discoverable (see README).
+faster-whisper==1.2.1
+ctranslate2>=4.5,<5

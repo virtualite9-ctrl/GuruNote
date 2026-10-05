@@ -742,13 +742,10 @@ def main() -> None:
             )
 
         # WhisperX 미설치 감지 + 안내
-        # mlx 또는 Apple Silicon 의 auto 라우팅에서는 WhisperX 가 필요 없으므로 스킵
+        # auto/faster-whisper 는 WhisperX 설치나 클라우드 전환을 요구하지 않는다.
         engine_to_use = settings["engine"]
         if yt_submitted or local_submitted:
-            needs_whisperx = (
-                engine_to_use == "whisperx"
-                or (engine_to_use == "auto" and not is_apple_silicon())
-            )
+            needs_whisperx = engine_to_use == "whisperx"
             if needs_whisperx and not is_whisperx_installed():
                 st.warning(
                     "WhisperX-ASR 패키지가 설치되어 있지 않습니다. "

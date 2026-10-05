@@ -3088,7 +3088,7 @@ class GuruNoteApp(ctk.CTk):
             ).grid(row=2 + i, column=0, padx=10, pady=2, sticky="ew")
 
         ctk.CTkLabel(
-            sb, text="v1.0.0.38", font=ctk.CTkFont(size=10), text_color=C_TEXT_DIM,
+            sb, text="v1.1.0.0", font=ctk.CTkFont(size=10), text_color=C_TEXT_DIM,
         ).grid(row=7, column=0, padx=20, pady=(0, 16), sticky="sw")
 
     # ── 메인 영역 ────────────────────────────────────────────
@@ -3681,14 +3681,11 @@ class GuruNoteApp(ctk.CTk):
     def _check_whisperx_available(self) -> bool:
         """WhisperX 미설치 시 설치/AssemblyAI 전환/취소 선택.
 
-        engine 이 mlx/assemblyai 면 WhisperX 가 필요 없고, Apple Silicon 에서는
-        auto 라우팅이 MLX 또는 AssemblyAI 로 가므로 WhisperX 설치 안내를 생략한다.
+        명시적으로 whisperx 를 선택한 경우에만 안내한다.
+        auto/faster-whisper 는 WhisperX 를 요구하거나 클라우드로 전환하지 않는다.
         """
         engine = self._stt_var.get()
-        if engine in ("assemblyai", "mlx"):
-            return True
-        if engine == "auto" and is_apple_silicon():
-            # auto 는 macOS arm64 에서 MLX → AssemblyAI 순서로 폴백
+        if engine != "whisperx":
             return True
         if is_whisperx_installed():
             return True

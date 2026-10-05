@@ -34,7 +34,7 @@ const SUPPORTED_AUDIO = ['.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg', '.wma'
 const SUPPORTED_VIDEO = ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.wmv', '.flv', '.ts', '.m4v'];
 const SUPPORTED_EXTS = new Set([...SUPPORTED_AUDIO, ...SUPPORTED_VIDEO]);
 
-const STT_OPTIONS = ['auto', 'whisperx', 'mlx', 'assemblyai'];
+const STT_OPTIONS = ['auto', 'faster-whisper', 'whisperx', 'mlx', 'assemblyai'];
 const LLM_OPTIONS = [
   { value: 'openai',            label: 'openai' },
   { value: 'anthropic',         label: 'anthropic' },

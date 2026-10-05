@@ -80,6 +80,19 @@ class TestLegacyCustomTkinterEntryPoint:
             "print('ok')\n")
         assert result.returncode == 0, result.stdout + result.stderr
 
+    @pytest.mark.parametrize("engine", ["auto", "faster-whisper", "mlx", "assemblyai"])
+    def test_local_routes_do_not_prompt_for_whisperx_or_cloud(self, engine):
+        result = run(
+            "import gui, types\n"
+            "def forbidden(*a, **k):\n"
+            "    raise AssertionError('unexpected WhisperX/cloud preflight')\n"
+            "gui.is_whisperx_installed = forbidden\n"
+            "gui.is_apple_silicon = lambda: False\n"
+            "gui.messagebox.askyesnocancel = forbidden\n"
+            f"state = types.SimpleNamespace(_stt_var=types.SimpleNamespace(get=lambda: {engine!r}))\n"
+            "assert gui.GuruNoteApp._check_whisperx_available(state) is True\n")
+        assert result.returncode == 0, result.stdout + result.stderr
+
     def test_gui_re_exports_the_same_worker_class(self):
         result = run(
             "import gui\n"

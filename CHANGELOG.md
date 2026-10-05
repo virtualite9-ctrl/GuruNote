@@ -7,6 +7,30 @@
 
 ## [Unreleased]
 
+## [1.1.0.0] - 2026-10-05
+
+### Added
+
+- `faster-whisper` STT 엔진: CTranslate2 CUDA FP16 직접 추론, 자동 언어 감지,
+  타임스탬프 보존. 기본 모델은 `large-v3`이며 `FASTER_WHISPER_MODEL`로 ID/로컬 경로를 지정한다.
+- 직접 엔진용 `requirements-faster-whisper.txt`. PyTorch/WhisperX/pyannote 없이 사용 가능하다.
+- 직접 엔진의 협력적 취소와 성공·실패·취소 시 모델 해제. 실행 중인 native decode는 즉시 중단되지 않는다.
+
+### Changed
+
+- `auto` STT는 CUDA Faster-Whisper → Apple Silicon MLX 순서로 로컬 엔진만 선택한다.
+  로컬 미설치·실패·빈 전사·취소 시 CPU나 클라우드로 자동 전환하지 않는다.
+  클라우드 전사는 `assemblyai`를 명시적으로 선택해야 한다. LLM provider 설정은 변경하지 않는다.
+- 직접 엔진은 화자 분리를 수행하지 않고 `UNKNOWN`으로 표시한다.
+  정렬/화자 분리가 필요하면 기존 `whisperx`를 명시적으로 선택한다.
+- CLI/GUI/React 엔진 목록에 `faster-whisper` 추가. legacy GUI/Streamlit은
+  `whisperx`를 명시적으로 선택한 경우에만 WhisperX 설치 안내를 표시한다.
+
+### Fixed
+
+- 알 수 없는 STT 엔진 이름은 전사/업로드 전에 오류로 거부한다.
+- 취소된 요청은 엔진 로딩이나 클라우드 업로드 전에 중단한다.
+
 ## [1.0.0.38] - 2026-09-16
 
 ### Fixed
@@ -2072,7 +2096,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.0.0.38...HEAD
+[Unreleased]: https://github.com/virtualite9-ctrl/GuruNote/compare/v1.1.0.0...HEAD
+[1.1.0.0]: https://github.com/virtualite9-ctrl/GuruNote/compare/v1.0.0.38...v1.1.0.0
 [1.0.0.38]: https://github.com/avlp12/GuruNote/compare/v1.0.0.37...v1.0.0.38
 [1.0.0.37]: https://github.com/avlp12/GuruNote/compare/v1.0.0.36...v1.0.0.37
 [1.0.0.36]: https://github.com/avlp12/GuruNote/compare/v1.0.0.35...v1.0.0.36

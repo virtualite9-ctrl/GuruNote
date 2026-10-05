@@ -9,7 +9,7 @@ UI 가 아닌 곳(CLI, 에이전트, 테스트)에서도 같은 목록을 참조
 from __future__ import annotations
 
 # `gurunote.stt.transcribe(engine=...)` 가 받는 값. "auto" 는 하드웨어를 보고 고른다.
-STT_ENGINES = ("auto", "whisperx", "mlx", "assemblyai")
+STT_ENGINES = ("auto", "faster-whisper", "whisperx", "mlx", "assemblyai")
 DEFAULT_STT_ENGINE = "auto"
 
 # `gurunote.llm.LLMConfig(provider=...)` 가 받는 값.

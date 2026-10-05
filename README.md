@@ -1,6 +1,6 @@
 # GuruNote 🎙️
 
-> 유튜브 링크 한 줄로 해외 IT/AI 팟캐스트를 **화자 분리된 한국어 마크다운 요약본**으로.
+> 유튜브 링크 한 줄로 해외 IT/AI 팟캐스트를 **타임스탬프가 있는 한국어 마크다운 요약본**으로. 화자 분리는 엔진에 따라 선택합니다.
 
 ```bash
 $ ./run_webview.command            # macOS — React/PyWebView UI (v1.0+ 권장 진입점)
@@ -71,7 +71,7 @@ cd GuruNote
 bash setup.sh        # macOS / Linux  (Windows 는 setup.bat)
 # 자동 감지 + 설치:
 #   - Apple Silicon Mac (M1~M5)  → MLX Whisper + pyannote (Metal/MPS GPU 가속, 권장)
-#   - NVIDIA GPU (Linux/Windows) → CUDA PyTorch + WhisperX
+#   - NVIDIA GPU (Linux/Windows) → Faster-Whisper + CUDA PyTorch/WhisperX (선택 엔진용)
 #   - 그 외                       → AssemblyAI Cloud API 만 사용 가능
 
 # 3. API 키 설정 (OpenAI / Anthropic / Google Gemini 중 하나)
@@ -110,11 +110,13 @@ bash run_web.sh              # Streamlit (macOS/Linux), Windows 는 run_web.bat
   **기존 자막**(수동/자동) 을 함께 수집해 LLM 번역·요약 단계에 컨텍스트로 주입.
   화자 실명 추론과 챕터 경계 유지 정확도가 향상되고, 최종 마크다운에는
   게시일/챕터 섹션이 자동으로 삽입됨.
-- 🗣️ **화자 분리 STT** — 플랫폼별 로컬 GPU 엔진 + 클라우드 폴백
-  - **NVIDIA GPU** (Linux/Windows): **WhisperX** (Distil-Whisper + pyannote, 청크 분할 처리, VRAM ~6GB)
+- 🗣️ **로컬 GPU STT** — `auto`는 CUDA Faster-Whisper → Apple Silicon MLX 순서로 선택
+  - **NVIDIA GPU** (Linux/Windows): **Faster-Whisper / CTranslate2**, CUDA FP16, 자동 언어 감지
   - **Apple Silicon Mac** (M1~M5): **MLX Whisper** + pyannote (Metal/MPS GPU 가속)
-  - **GPU 없음**: **AssemblyAI Cloud API** 자동 폴백
-  - 화자(Who) + 타임스탬프(When) + 내용(What) 을 동시 추출
+  - **화자 분리 선택**: 직접 Faster-Whisper는 `UNKNOWN` 화자로 표시. 정렬/화자 분리는 `whisperx`를 명시적으로 선택
+  - **로컬 미설치/실패/취소**: 오류로 중단. CPU/클라우드 자동 폴백 없음
+  - **클라우드 전사**: 오디오 업로드를 원할 때만 `assemblyai`를 명시적으로 선택
+  - 타임스탬프(When)와 내용(What)을 보존하며, 화자(Who)는 엔진에 따라 다름
   - IT/AI 도메인 핫워드 64 개 (Sam Altman, RLHF, Mixture of Experts …) 를 `initial_prompt` 로 주입해 고유명사/약어 인식률 향상
   - **의미 단위 재분할** — STT 직후 word-level 끝 검사로 Whisper 음성 경계 잘림을 보완. context leak 해소, 번역 정렬 drift 감소, 가독성 향상. 모델 비의존 방식으로 약한 로컬 LLM에서도 동일하게 작동.
 - 🌐 **IT/AI 전문 톤 한국어 번역** — OpenAI `gpt-5.4` / Anthropic `claude-sonnet-4-6` / Google Gemini `gemini-2.5-flash`
@@ -142,7 +144,7 @@ bash run_web.sh              # Streamlit (macOS/Linux), Windows 는 run_web.bat
 - 📊 **대시보드** — 분야/업로더/태그/월별 통계 + 의미 검색 인덱스 빌드 패널
 - ⏱ **실시간 진행 표시** — 5단계 뱃지 인디케이터 + ETA (경과 시간 + 남은 예상 시간)
 - 🎨 **Material 3 React UI** (v1.0+) — `gurunote/webui/` 의 React + Tailwind CSS 구성. PyWebView 가 네이티브 윈도우 (macOS WKWebView / Windows WebView2 / Linux WebKitGTK) 를 띄움. 사이드바 + 5개 화면 (Main / History / Editor / Dashboard / Settings).
-- 📦 **WhisperX 미설치 시 안내** (NVIDIA 환경) — 설치 또는 AssemblyAI 전환 선택 다이얼로그.
+- 📦 **WhisperX 미설치 시 안내** — `whisperx`를 명시적으로 선택한 legacy UI에서만 설치/AssemblyAI 전환 선택 다이얼로그. `auto`와 `faster-whisper`는 이 안내를 건너뜀.
   Apple Silicon 환경에서는 `setup.sh` 가 MLX 스택을 자동 설치.
 - 🧹 **임시 파일 자동 정리**
 
@@ -190,7 +192,8 @@ GPT-5 의 아키텍처, AGI 로드맵, AI 안전성 연구 방향을 심층 논�
    │
    ▼  [Step 1] yt-dlp — 오디오 추출 (mp3)
    │
-   ▼  [Step 2] WhisperX (NVIDIA) / MLX (Apple Silicon) / AssemblyAI — 화자 분리 전사
+   ▼  [Step 2] Faster-Whisper (CUDA) / MLX (Apple Silicon) — 로컬 전사
+   │          └ WhisperX (화자 분리) / AssemblyAI (클라우드)는 명시적 선택
    │          └ IT/AI 핫워드를 initial_prompt 로 주입
    │          └ 청크 분할 처리 (영상 길이 제한 없음)
    │
@@ -218,12 +221,12 @@ GuruNote_<영상제목>.md
   - Windows: `winget install --id Gyan.FFmpeg -e` (또는 공식 사이트 다운로드)
   - Ubuntu/Debian: `sudo apt install ffmpeg`
 - **로컬 STT GPU (선택)** — `setup.sh` 가 자동 감지/설치
-  - **NVIDIA (Linux/Windows)** — WhisperX, VRAM ~6GB 권장 (Distil-Whisper + 청크 분할)
+  - **NVIDIA (Linux/Windows)** — Faster-Whisper CUDA 12 + cuDNN 9. 필요한 VRAM은 모델과 동시 실행 작업에 따라 다름
   - **Apple Silicon (M1~M5)** — MLX Whisper, 16GB+ Unified Memory 권장
   - **GPU 없음** — `GURUNOTE_STT_ENGINE=assemblyai` 로 클라우드 API 사용
 - **API Key** (최소 하나씩)
   - LLM: `OPENAI_API_KEY` **또는** `ANTHROPIC_API_KEY`
-  - STT 폴백용(선택): `ASSEMBLYAI_API_KEY`
+  - 명시적 클라우드 STT용(선택): `ASSEMBLYAI_API_KEY`
 
 ---
 
@@ -247,9 +250,9 @@ setup 스크립트가 순서대로 수행하는 작업:
 
 1. `.venv/` 가상환경 생성 (이미 있으면 재사용) — `python3 -m venv .venv`
 2. 플랫폼 감지: `nvidia-smi` 존재 여부 + `uname -s/-m`
-3. 공통 의존성(`requirements.txt`) 설치 (UI / audio / LLM / AssemblyAI 폴백)
+3. 공통 의존성(`requirements.txt`) 설치 (UI / audio / LLM / 명시적 AssemblyAI)
 4. 플랫폼별 STT 엔진 추가 설치:
-   - **NVIDIA GPU** → CUDA PyTorch 2.8.0 + `requirements-gpu.txt` (WhisperX)
+   - **NVIDIA GPU** → CUDA PyTorch 2.8.0 + `requirements-gpu.txt` (Faster-Whisper + 선택적 WhisperX 경로)
    - **Apple Silicon** → `requirements-mac.txt` (MLX Whisper + pyannote + onnxruntime)
    - **감지 실패** → 추가 설치 없음 (AssemblyAI Cloud API 만 사용 가능)
 5. 환경 검증 — PyTorch 버전, CUDA/MPS 가용성, 핵심 라이브러리 import 확인
@@ -259,11 +262,40 @@ setup 스크립트가 순서대로 수행하는 작업:
 > `run_web.sh` 래퍼가 `.venv/bin/python` 을 직접 호출하므로 `source activate`
 > 없이 동작합니다 (macOS 의 `command not found: python` / `streamlit` 문제 회피).
 
+### NVIDIA 직접 STT만 설치하기
+
+기존 setup 스크립트는 WhisperX 스택도 설치합니다. 화자 분리가 필요 없으면
+가상환경 안에서 다음 경로로 PyTorch/WhisperX/pyannote 없이 직접 STT를 설치할 수 있습니다.
+
+```bash
+python -m pip install -r requirements.txt -r requirements-faster-whisper.txt
+```
+
+CTranslate2는 **CUDA 12 cuBLAS + cuDNN 9** 공유 라이브러리를 찾을 수 있어야 합니다.
+CUDA PyTorch 설치 여부와 별개이며, 라이브러리가 없으면 오류로 중단합니다.
+Linux에서 pip 런타임을 쓰는 예 (활성 가상환경에서, 앱을 시작하기 전에 실행):
+
+```bash
+python -m pip install 'nvidia-cublas-cu12>=12,<13' 'nvidia-cudnn-cu12>=9.8,<10'
+export LD_LIBRARY_PATH="$(python -c 'import os, nvidia.cublas.lib, nvidia.cudnn.lib; print(os.path.dirname(nvidia.cublas.lib.__file__) + ":" + os.path.dirname(nvidia.cudnn.lib.__file__))')${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+```
+
+Windows는 CUDA/cuDNN DLL 디렉터리가 `PATH`에 있어야 합니다.
+플랫폼별 세부사항은 [Faster-Whisper GPU 설치 안내](https://github.com/SYSTRAN/faster-whisper#gpu)를 참고하세요.
+
+`.env`에서 `FASTER_WHISPER_MODEL=large-v3` (기본) 또는 `base`/`small`/로컬 CTranslate2 모델 경로를 지정합니다.
+VRAM 부족 시 모델을 자동 축소하거나 CPU로 넘기지 않습니다. 직접 엔진은 자동 언어 감지,
+세그먼트 타임스탬프, `UNKNOWN` 화자 라벨을 반환하며 화자 분리는 수행하지 않습니다.
+취소는 모델 로딩 전후와 세그먼트 사이에서 확인하므로 진행 중인 native decode는 즉시 끊기지 않습니다.
+
+`auto`의 로컬 전용 보장은 **STT 단계에 한정**됩니다. 번역/요약도 로컬로 처리하려면
+별도로 `LLM_PROVIDER=openai_compatible`와 로컬 `OPENAI_BASE_URL`을 설정하세요.
+
 ### 📦 데스크톱 패키지 vs 소스 실행
 
 | | 데스크톱 패키지 (.exe / .dmg / .pkg) | 소스 실행 (`bash setup.sh`) |
 |---|---|---|
-| **포함 STT 엔진** | AssemblyAI (클라우드만) | WhisperX (NVIDIA) / MLX (Apple Silicon) / AssemblyAI |
+| **포함 STT 엔진** | AssemblyAI (클라우드만, 명시적 선택 필요) | Faster-Whisper / WhisperX (NVIDIA) / MLX (Apple Silicon) / AssemblyAI |
 | **로컬 GPU 가속** | ❌ (PyInstaller 번들 한계) | ✅ |
 | **인터넷 필요** | STT 마다 필요 | 로컬 STT 는 최초 모델 다운로드만 |
 | **설치 난이도** | 더블클릭 | 가상환경 + setup 스크립트 |
@@ -292,7 +324,7 @@ OPENAI_API_KEY=sk-...
 # 로컬 OpenAI-compatible 서버 (선택)
 # 예: oMLX / vLLM / Ollama / LM Studio / llama.cpp server
 OPENAI_BASE_URL=http://127.0.0.1:8000/v1
-# STT 엔진 기본값 auto: NVIDIA → WhisperX, Apple Silicon → MLX, 그 외 → AssemblyAI
+# STT 엔진 기본값 auto: CUDA Faster-Whisper → Apple Silicon MLX, 그 외/실패는 중단
 GURUNOTE_STT_ENGINE=auto
 ```
 
@@ -464,7 +496,7 @@ bash run_web.sh               # macOS / Linux  (Windows: run_web.bat)
 ```
 1. 유튜브 URL 입력 (또는 📁 로컬 파일 선택)
        ↓
-2. STT 엔진 (auto / whisperx / mlx / assemblyai)
+2. STT 엔진 (auto / faster-whisper / whisperx / mlx / assemblyai)
    LLM 제공자 (openai / anthropic / gemini / openai_compatible) 선택
        ↓
 3. "▶ GuruNote 생성하기" 클릭
@@ -477,7 +509,7 @@ bash run_web.sh               # macOS / Linux  (Windows: run_web.bat)
 ```
 
 > **최초 실행 안내:**
-> WhisperX (Distil-Whisper large-v3, ~1.5GB) 또는 MLX Whisper (large-v3, ~3GB)
+> 선택한 Faster-Whisper (기본 large-v3), WhisperX (Distil-Whisper) 또는 MLX Whisper 모델의
 > 모델 가중치를 Hugging Face Hub 에서 다운로드합니다. 네트워크 속도에 따라
 > **수 분이 소요**될 수 있으며, 터미널에 진행 상황이 표시됩니다. 이후 실행부터는
 > 로컬 캐시(`~/.gurunote/models/` 또는 `~/.cache/huggingface/`)를 사용합니다.
@@ -552,7 +584,8 @@ GuruNote/
 │   ├── options.py              # STT 엔진 / LLM provider 목록의 단일 출처
 │   ├── types.py                # Segment / Transcript 공통 데이터클래스
 │   ├── audio.py                # Step 1 — yt-dlp + 로컬 파일 오디오 추출
-│   ├── stt.py                  # Step 2 — WhisperX (NVIDIA) + AssemblyAI 폴백 라우터
+│   ├── stt.py                  # Step 2 — 로컬 auto 라우터 + 명시적 WhisperX/AssemblyAI
+│   ├── stt_faster_whisper.py   # Step 2 — CTranslate2 CUDA FP16 직접 전사 (화자 미분리)
 │   ├── stt_mlx.py              # Step 2 — MLX Whisper + pyannote (Apple Silicon) + 의미 단위 재분할 (v1.0+)
 │   ├── llm/                    # Step 3~4 — LLM 번역·요약 (8개 모듈)
 │   │   ├── client.py           #   provider 호출 경계 (재시도·타임아웃·xgrammar)
@@ -607,7 +640,7 @@ GuruNote/
 | UI (v1.0+ 권장) | [React](https://react.dev/) (Babel standalone) + Material 3 톤 CSS + [Tailwind CSS](https://tailwindcss.com/) utility + [PyWebView](https://pywebview.flowrl.com/) 4.x (macOS WKWebView / Windows WebView2 / Linux WebKitGTK) |
 | UI (v0.8 호환) | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) 데스크톱 (`gui.py`) · [Streamlit](https://streamlit.io/) 웹 (`app.py`) |
 | 오디오 추출 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) · ffmpeg |
-| STT + 화자 분리 | [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) + [pyannote.audio](https://github.com/pyannote/pyannote-audio) `community-1` (Apple Silicon, Metal/MPS) · [WhisperX](https://github.com/m-bain/whisperX) (NVIDIA CUDA) · [AssemblyAI](https://www.assemblyai.com/) (Cloud fallback) · 의미 단위 재분할 (v1.0+) |
+| STT + 선택적 화자 분리 | [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2 CUDA FP16, 화자 미분리) · [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) + [pyannote.audio](https://github.com/pyannote/pyannote-audio) `community-1` (Apple Silicon, Metal/MPS) · [WhisperX](https://github.com/m-bain/whisperX) (NVIDIA CUDA) · [AssemblyAI](https://www.assemblyai.com/) (명시적 Cloud 선택) · 의미 단위 재분할 (v1.0+) |
 | 번역 / 요약 | [OpenAI](https://platform.openai.com/) `gpt-5.4` · [Anthropic](https://docs.anthropic.com/) `claude-sonnet-4-6` · [Google Gemini](https://aistudio.google.com/) `gemini-2.5-flash` · OpenAI-compatible (로컬 LLM, oMLX / vLLM / LM Studio / llama.cpp 등) · 2-pass DCCD + entity_cache + 외래어 표기법 |
 | 환경 설정 | [python-dotenv](https://pypi.org/project/python-dotenv/) · 앱 내 Settings 화면 |
 
@@ -618,7 +651,7 @@ GuruNote/
 주요 변경 사항은 [CHANGELOG.md](./CHANGELOG.md) 에 [Keep a Changelog](https://keepachangelog.com/)
 형식으로 기록되며 버전은 [Semantic Versioning](https://semver.org/) 을 따릅니다.
 
-현재 버전: **v1.0.0.38** — 영문 병기 검증이 `(Gen AI)` 같은 병기에서 KeyError 로 작업 전체를 죽이던 버그를 고쳤습니다.
+현재 버전: **v1.1.0.0** — 직접 Faster-Whisper CUDA STT, 로컬 전용 auto, 취소/모델 해제 지원.
 
 ### v1.0.0.0 주요 변경 (요약)
 
@@ -648,13 +681,14 @@ GuruNote/
 | **`gui.py` 를 지워도 되나요?** | 부재 — React UI (`app_webview.py`) 가 `gui.py` 의 `PipelineWorker` 클래스를 import 합니다 (`gurunote/webui/session.py`). 옛 CustomTkinter UI 코드와 파이프라인 워커 로직이 같은 파일에 들어있어 분리 부재 상태입니다 (백로그 등록 — `docs/backlog.md` B09). 이 분리 작업 전까지는 `gui.py` 유지 필요. |
 | **GPU 없이 쓸 수 있나요?** | `.env` 에서 `GURUNOTE_STT_ENGINE=assemblyai` 로 설정하면 클라우드 API 로 동작합니다 (AssemblyAI 키 필요). |
 | **Apple Silicon Mac (M1~M5) 에서 GPU 로컬 STT 가 되나요?** | 네. v0.6.0 부터 `setup.sh` 가 Apple Silicon 을 자동 감지해 `mlx-whisper` + `pyannote.audio` 를 설치합니다. STT 엔진을 `auto` 로 두면 Metal/MPS GPU 가속으로 로컬 전사 + 화자 분리가 동작합니다. 화자 분리에는 `HUGGINGFACE_TOKEN` + [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) 및 [pyannote/segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0) 모델 동의가 필요합니다. 위 🔑 환경변수 설정 섹션의 안내를 참고하세요. |
-| **1시간 넘는 영상은?** | WhisperX / MLX 모두 청크 분할 처리라 길이 제한이 없습니다. AssemblyAI 도 길이 제한 없음. |
+| **1시간 넘는 영상은?** | 엔진과 입력 길이에 따라 RAM/VRAM과 시간이 필요합니다. 직접 Faster-Whisper 경로의 이번 GPU 검증은 짧은 공개 영어 음성 + `base` 모델이며, 장편/large-v3 성능은 별도 검증이 필요합니다. |
 | **로컬 LLM 을 쓰고 싶어요** | `.env` 에서 `LLM_PROVIDER=openai_compatible` + `OPENAI_BASE_URL=http://127.0.0.1:8000/v1` 설정. Ollama, vLLM, LM Studio 등 OpenAI-compatible 서버라면 모두 가능합니다. |
 | **"ffmpeg not found" 에러** | Mac: `brew install ffmpeg` / Windows: `winget install ffmpeg` / Ubuntu: `sudo apt install ffmpeg` |
 | **모델 가중치 다운로드가 오래 걸려요** | MLX Whisper large-v3 (~3GB) / WhisperX Distil-Whisper (~1.5GB) / pyannote community-1 (~수십 MB) 는 최초 1회만 다운로드됩니다. 이후는 로컬 캐시 (`~/.cache/huggingface/` 또는 `~/.gurunote/models/`) 를 사용합니다. |
 | **API 키를 어디에 넣나요?** | 앱 실행 후 Settings → 입력 → Save. `.env` 파일에 자동 기록됩니다. |
-| **CUDA Out of Memory 에러** | v0.3.0 부터 자동으로 토큰 수를 줄여 재시도합니다 (32768→16384→8192). 그래도 실패하면 모델을 자동 언로드하고 에러 메시지에 해결 방법을 안내합니다. |
-| **WhisperX 가 설치 안 됐다고 떠요** (NVIDIA) | "GuruNote 생성하기" 클릭 시 설치/AssemblyAI 전환 선택 다이얼로그가 뜹니다. Apple Silicon 에선 MLX 자동 사용. |
+| **CUDA Out of Memory 에러** | 직접 Faster-Whisper는 오류로 중단하고 생성된 모델을 해제합니다. `FASTER_WHISPER_MODEL=base`/`small` 또는 충분한 여유 VRAM을 확인하세요. 자동 모델 축소나 CPU/클라우드 폴백은 없습니다. |
+| **WhisperX 가 설치 안 됐다고 떠요** (NVIDIA) | `whisperx`를 명시적으로 선택한 legacy UI에서만 설치/AssemblyAI 전환 선택 안내가 뜹니다. `auto`/`faster-whisper`는 직접 엔진을 사용하므로 `requirements-faster-whisper.txt`와 CUDA 라이브러리를 확인하세요. |
+| **Faster-Whisper에서 화자 수가 1로 보여요** | `UNKNOWN`은 미분리 라벨이지 실제 1명이라는 추정이 아닙니다. 화자 분리가 필요하면 `whisperx`를 명시적으로 선택하세요. |
 | **PDF 출력 패키지가 없다고 떠요** | v0.7.0.4 부터 `Save PDF` 클릭 시 "지금 자동 설치할까요?" 확인 → 승인 시 `brew install cairo pango gdk-pixbuf libffi` + `pip install` 자동 실행 (macOS+Homebrew). Linux 는 sudo 가 필요해서 명령만 안내됨. Windows 는 pip 만 자동. |
 | **Obsidian vault 경로를 어떻게 설정하나요?** | v0.7.0.5 부터 `→ Obsidian` 클릭 시 자동 감지된 vault 후보 + "폴더 찾아보기" 다이얼로그가 뜹니다. Settings 다이얼로그에서도 "찾아보기" 버튼 + 실시간 유효성 chip (`✓ vault` 등) 으로 한 클릭 설정 가능. |
 | **터미널에 pyannote 다운로드 로그가 자꾸 뜹니다** (macOS) | React UI (`run_webview.command`) 는 콘솔에 그대로 출력합니다 (디버깅 편의). 백그라운드 분리가 필요하면 옛 `./run_gui.command` 로 실행 — `nohup` + `disown` 으로 터미널과 분리되고 로그는 `~/.gurunote/gui.log` 로만 갑니다. `tail -f ~/.gurunote/gui.log` 로 진단. |
