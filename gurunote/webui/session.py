@@ -62,22 +62,32 @@ class PipelineSession:
         }
     """
 
-    def __init__(self, window: Any, source: dict) -> None:
+    def __init__(self, window: Any, source: dict, on_terminal=None, on_event=None) -> None:
         kind = source["kind"]
         value = source["value"]
 
         self.window = window
         self.source = source
+        extra = {}
+        if source.get("diarization_backend") is not None:
+            extra["diarization_backend"] = source["diarization_backend"]
         self.worker = PipelineWorker(
             engine=source["engine"],
             provider=source["provider"],
             youtube_url=value if kind == "youtube" else "",
             local_file=value if kind == "local" else "",
+            **extra,
         )
         self.job_id = self.worker.job_id
         self._done = False
         self._timer: threading.Timer | None = None
         self._autosave_path: str | None = None
+        self._terminal_lock = threading.RLock()
+        self._pending_result = None
+        self._preview_revision = 0
+        self.last_preview: dict = {}
+        self._on_terminal = on_terminal
+        self._on_event = on_event
 
     # ---- public
 
@@ -99,6 +109,8 @@ class PipelineSession:
         self._timer.start()
 
     def _poll(self) -> None:
+        if self._done:
+            return
         # 1) Drain msg_queue — batch or per-line per user spec
         lines: list[str] = []
         while True:
@@ -113,10 +125,10 @@ class PipelineSession:
             if line.startswith(_AUTOSAVE_LOG_PREFIX):
                 self._autosave_path = line[len(_AUTOSAVE_LOG_PREFIX):].strip() or None
         if len(lines) >= _LOG_BATCH_THRESHOLD:
-            self._emit("log_batch", {"lines": lines})
+            self._emit("log_batch", {"job_id": self.job_id, "lines": lines})
         else:
             for line in lines:
-                self._emit("log", {"line": line})
+                self._emit("log", {"job_id": self.job_id, "line": line})
 
         # 2) Drain progress_queue — always per-event (low frequency)
         while True:
@@ -126,17 +138,70 @@ class PipelineSession:
             except queue.Empty:
                 break
 
-        # 3) Check result_queue (at most one per job → terminal)
-        try:
-            raw = self.worker.result_queue.get_nowait()
-            self._done = True
-            self._emit("result", self._normalize_result(raw))
-            _ACTIVE.pop(self.job_id, None)
-            return
-        except queue.Empty:
-            pass
+        # Preview is not the final post-processed result. Latest snapshot only.
+        partials = getattr(self.worker, "partial_queue", None)
+        if partials is not None and self._pending_result is None:
+            while True:
+                try:
+                    data = dict(partials.get_nowait())
+                except queue.Empty:
+                    break
+                revision = data.get("revision", 0)
+                if type(revision) is not int or revision <= self._preview_revision:
+                    continue
+                with self._terminal_lock:
+                    if self._done or self._pending_result is not None:
+                        break
+                    self._preview_revision = revision
+                    data.update(job_id=self.job_id, is_partial=True)
+                    self.last_preview = data
+                    self._emit("partial_result", data)
+        with self._terminal_lock:
+            if not self._done and self._pending_result is None:
+                try:
+                    self._pending_result = self.worker.result_queue.get_nowait()
+                except queue.Empty:
+                    pass
+        self.finalize_if_ended()
+        if not self._done:
+            self._schedule_poll()
 
-        self._schedule_poll()
+    def finalize_if_ended(self, start_error=None) -> None:
+        """Exactly once, and only after worker cleanup/tee teardown has ended.
+
+        The queue supervisor calls this even if Timer setup or the poller failed.
+        A dead thread with no result is failure, never an occupied slot forever.
+        """
+        thread = getattr(self.worker, "_thread", None)
+        if thread is not None and thread.is_alive():
+            return
+        with self._terminal_lock:
+            if self._done:
+                return
+            if self._pending_result is None:
+                try:
+                    self._pending_result = self.worker.result_queue.get_nowait()
+                except queue.Empty:
+                    pass
+            raw = self._pending_result
+            if start_error:
+                raw = {"ok": False, "error": "SESSION_START_FAILED:" + str(start_error)}
+            elif raw is None:
+                raw = {"ok": False, "error": "PIPELINE_EXITED_WITHOUT_RESULT: 작업이 결과 없이 종료되었습니다."}
+            try:
+                data = self._normalize_result(raw)
+            except Exception as exc:
+                data = {"job_id": self.job_id, "ok": False, "error": "RESULT_RENDER_FAILED:" + str(exc)}
+            self._done = True
+            if self._timer is not None:
+                self._timer.cancel()
+            _ACTIVE.pop(self.job_id, None)
+            # Duplicate finalizers must wait for terminal delivery and acknowledgement.
+            try:
+                self._emit("result", data)
+            finally:
+                if self._on_terminal is not None:
+                    self._on_terminal(data)
 
     def _normalize_result(self, result: dict) -> dict:
         """Convert worker's result dict (containing Python objects) to JSON-safe shape."""
@@ -145,6 +210,7 @@ class PipelineSession:
                 "job_id": self.job_id,
                 "ok": False,
                 "error": str(result.get("error", "알 수 없는 오류")),
+                "stopped": bool(result.get("stopped", False)),
             }
 
         full_md = result.get("full_md", "")
@@ -155,7 +221,8 @@ class PipelineSession:
         # 'summary' tab 데이터 source. 기존 payload 부재 → live CreateScreen 의 두
         # tab 이 항상 placeholder 표시. bridge.py 의 _parse_transcripts /
         # _parse_summary 와 동일 logic 재사용 (lazy import — 순환 회피).
-        from gurunote.webui.bridge import _parse_transcripts, _parse_summary  # noqa: PLC0415
+        # Reuse the shared service parsers (the window bridge only inherits the service).
+        from gurunote.service import _parse_transcripts, _parse_summary  # noqa: PLC0415
         korean_transcript, english_transcript = _parse_transcripts(full_md)
         summary_text = _parse_summary(full_md)
         summary_html = _md_to_html(summary_text) if summary_text else ""
@@ -175,6 +242,11 @@ class PipelineSession:
 
     def _emit(self, event: str, payload: dict) -> None:
         """Push an event to JS. Swallows errors (window may be closed)."""
+        if self._on_event is not None:
+            try:
+                self._on_event(event, payload)
+            except Exception:
+                pass
         try:
             js_event = json.dumps(event)
             js_payload = json.dumps(payload, ensure_ascii=False, default=str)

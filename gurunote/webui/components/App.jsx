@@ -25,6 +25,10 @@ const APP_DEFAULT_MAIN_SESSION = {
   selectedFile: null,
   stt: 'auto',
   llm: 'openai',
+  diarization: 'resemblyzer',
+  queue: { items: [], paused: false, version: -1 },
+  viewingQueueId: null,
+  elapsedSeconds: 0,
   dragOver: false,
   running: false,
   pct: 0,
@@ -140,7 +144,65 @@ function App() {
     ));
   }, []);
   const jobIdRef = useRef(null);
+  const queueVersionRef = useRef(-1);
+  const previewRevisionRef = useRef(0);
+  const knownJobIdsRef = useRef(new Set());
+  const completedJobIdsRef = useRef(new Set());
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
+  const restoreQueueResult = useCallback((result, { queueId, jobId, request, viewingId = null, automatic = false }) => {
+    updateMainSession((prev) => {
+      if (prev.viewingQueueId !== viewingId ||
+          (automatic ? prev.automaticRestoreRequest : prev.resultSelectionRequest) !== request) return {};
+      if (result && jobId && result.job_id !== jobId) return {};
+      if (!viewingId) {
+        const active = prev.queue?.items?.find((x) => x.queue_id === prev.queue.active_queue_id);
+        if (!active || active.queue_id !== queueId || active.job_id !== jobId || jobIdRef.current !== jobId) return {};
+        const current = prev.result?.job_id === jobId ? prev.result : null;
+        if (result?.is_partial) {
+          if (completedJobIdsRef.current.has(jobId) ||
+              ['completed', 'failed', 'stopped'].includes(active.status) ||
+              (current && !current.is_partial) || !Number.isInteger(result.revision) ||
+              result.revision < Math.max(previewRevisionRef.current, current?.revision || 0)) return {};
+          previewRevisionRef.current = Math.max(previewRevisionRef.current, result.revision);
+        }
+        if (!result && (current || completedJobIdsRef.current.has(jobId))) return {};
+      }
+      return { result };
+    });
+  }, [updateMainSession]);
+
+  const acceptQueueSnapshot = useCallback((snapshot) => {
+    if (!snapshot || snapshot.version < queueVersionRef.current) return;
+    queueVersionRef.current = snapshot.version;
+    (snapshot.items || []).forEach((x) => { if (x.job_id) knownJobIdsRef.current.add(x.job_id); });
+    const active = (snapshot.items || []).find((x) => x.queue_id === snapshot.active_queue_id);
+    const changed = active?.job_id && active.job_id !== jobIdRef.current;
+    const request = {};
+    if (changed) previewRevisionRef.current = 0;
+    jobIdRef.current = active?.job_id || null;
+    updateMainSession((prev) => ({ queue: snapshot, running: !!active,
+      pct: active ? active.progress || 0 : prev.pct,
+      startedAt: active?.started_at ? active.started_at * 1000 : prev.startedAt,
+      elapsedSeconds: active ? active.elapsed_seconds || 0 : prev.elapsedSeconds,
+      ...(changed ? { automaticRestoreRequest: request, log: [], ...(prev.viewingQueueId ? {} : { result: null }) } : {}),
+    }));
+    if (changed && active.has_result) {
+      window.pywebview.api.get_pipeline_queue_result(active.queue_id).then((result) => {
+        if (result) restoreQueueResult(result, { queueId: active.queue_id, jobId: active.job_id, request, automatic: true });
+      }).catch(() => {});
+    }
+  }, [updateMainSession, restoreQueueResult]);
+  useEffect(() => {
+    let disposed = false;
+    const refresh = async () => {
+      if (!window.pywebview?.api?.get_pipeline_queue) return;
+      try { const q = await window.pywebview.api.get_pipeline_queue(); if (!disposed) acceptQueueSnapshot(q); }
+      catch (e) { console.warn('[queue snapshot]', e); }
+    };
+    refresh(); const timer = setInterval(refresh, 1000);
+    return () => { disposed = true; clearInterval(timer); };
+  }, [acceptQueueSnapshot]);
 
   // Phase 2B-6d + Step 3b-prep: 새 노트 만들기 CTA (⌘N) — counter pattern.
   //   Sidebar CTA 또는 ⌘N keydown 시 mainSession reset (모두 default) + counter
@@ -163,31 +225,26 @@ function App() {
   //   start_pipeline 이 r.job_id 반환 → jobIdRef.current 저장 (handleStop 사용).
   //   onResult 시점에 jobIdRef.current = null 로 clear (bus listener 안에서).
   const handlePipelineStart = useCallback(async (source) => {
-    updateMainSession({
-      running: true,
-      pct: 0,
-      stage: null,
-      log: [],
-      result: null,
-      startedAt: Date.now(),
-      now: Date.now(),
-    });
     try {
-      const r = await window.pywebview.api.start_pipeline(source);
-      jobIdRef.current = r.job_id;
+      const r = await window.pywebview.api.enqueue_pipeline_batch(Array.isArray(source) ? source : [source]);
+      acceptQueueSnapshot(r.queue);
+      if (r.added?.length) updateMainSession({ url: '', selectedFile: null });
+      if (window.showToast) {
+        if (r.errors?.length) window.showToast(`${r.added.length}개 등록 · 입력 오류 ${r.errors.length}개: ${r.errors[0].error}`, 'warning');
+        else window.showToast(`${r.added.length}개 대기열 등록${r.duplicates?.length ? ` · 중복 ${r.duplicates.length}개 제외` : ''}`);
+      }
     } catch (e) {
       console.error('[start_pipeline]', e);
       const msg = (e && e.message) || String(e);
       if (window.showToast) window.showToast(`파이프라인 시작 실패: ${msg}`, 'error');
-      updateMainSession({ running: false });
     }
-  }, [updateMainSession]);
+  }, [updateMainSession, acceptQueueSnapshot]);
 
   const handlePipelineStop = useCallback(async () => {
-    if (!jobIdRef.current) return;
     try {
-      await window.pywebview.api.stop_pipeline(jobIdRef.current);
-      if (window.showToast) window.showToast('중지 요청을 보냈습니다. 현재 단계가 끝나면 중지됩니다.');
+      const q = await window.pywebview.api.get_pipeline_queue();
+      if (q.active_queue_id) await window.pywebview.api.cancel_pipeline_queue_item(q.active_queue_id);
+      if (window.showToast) window.showToast('현재 작업 중지 요청 · 대기열은 일시정지됩니다.');
     } catch (e) {
       const msg = (e && e.message) || String(e);
       if (window.showToast) window.showToast(`중지 실패: ${msg}`, 'error');
@@ -278,28 +335,34 @@ function App() {
     }
 
     const onProgress = (e) => {
+      if (e.detail?.job_id !== jobIdRef.current) return;
       if (typeof e.detail?.pct === 'number') updateMainSession({ pct: e.detail.pct });
     };
     const onLog = (e) => {
-      if (e.detail?.line) updateMainSession((prev) => ({ log: [...prev.log, e.detail.line] }));
+      if (e.detail?.job_id !== jobIdRef.current) return;
+      if (e.detail?.line) updateMainSession((prev) => ({ log: [...prev.log, e.detail.line].slice(-500) }));
     };
     const onLogBatch = (e) => {
-      if (Array.isArray(e.detail?.lines)) updateMainSession((prev) => ({ log: [...prev.log, ...e.detail.lines] }));
+      if (e.detail?.job_id !== jobIdRef.current) return;
+      if (Array.isArray(e.detail?.lines)) updateMainSession((prev) => ({ log: [...prev.log, ...e.detail.lines].slice(-500) }));
     };
     const onStageChange = (e) => {
+      if (e.detail?.job_id !== jobIdRef.current) return;
       if (e.detail?.stage) updateMainSession({ stage: e.detail.stage });
     };
     const onResult = (e) => {
       const payload = e.detail || {};
-      jobIdRef.current = null;
+      if (!knownJobIdsRef.current.has(payload.job_id) || completedJobIdsRef.current.has(payload.job_id)) return;
+      completedJobIdsRef.current.add(payload.job_id);
+      const isCurrent = payload.job_id === jobIdRef.current;
       if (!payload.ok) {
         if (window.showToast) {
           window.showToast(`파이프라인 실패: ${payload.error || '알 수 없는 오류'}`, 'error');
         }
-        updateMainSession({ running: false, result: null });
+        if (isCurrent) updateMainSession((prev) => ({ running: false, ...(prev.viewingQueueId ? {} : { result: null }) }));
         return;
       }
-      updateMainSession({ running: false, pct: 1.0, result: payload });
+      if (isCurrent) updateMainSession((prev) => ({ running: false, pct: 1.0, ...(prev.viewingQueueId ? {} : { result: { ...payload, is_partial: false } }) }));
       // History refresh trigger — Sidebar / HistoryScreen / DashboardScreen 자동.
       setHistoryRefreshKey((k) => k + 1);
 
@@ -330,6 +393,15 @@ function App() {
       }
     };
 
+    const onQueue = (e) => acceptQueueSnapshot(e.detail);
+    const onPartial = (e) => {
+      const p = e.detail || {};
+      if (p.job_id !== jobIdRef.current || completedJobIdsRef.current.has(p.job_id) || !Number.isInteger(p.revision) || p.revision <= previewRevisionRef.current) return;
+      previewRevisionRef.current = p.revision;
+      updateMainSession((prev) => prev.viewingQueueId ? {} : { result: { ...(prev.result || {}), ...p }, stage: ({ stt: '전사 미리보기', translation: '번역 미리보기', summary: '요약 미리보기' })[p.stage] || p.stage });
+    };
+    window.bus.addEventListener('queue_changed', onQueue);
+    window.bus.addEventListener('partial_result', onPartial);
     window.bus.addEventListener('progress', onProgress);
     window.bus.addEventListener('log', onLog);
     window.bus.addEventListener('log_batch', onLogBatch);
@@ -338,12 +410,14 @@ function App() {
 
     return () => {
       window.bus.removeEventListener('progress', onProgress);
+      window.bus.removeEventListener('queue_changed', onQueue);
+      window.bus.removeEventListener('partial_result', onPartial);
       window.bus.removeEventListener('log', onLog);
       window.bus.removeEventListener('log_batch', onLogBatch);
       window.bus.removeEventListener('stage_change', onStageChange);
       window.bus.removeEventListener('result', onResult);
     };
-  }, [updateMainSession]);
+  }, [updateMainSession, acceptQueueSnapshot]);
 
   // Elapsed-time ticker — running 시만, mainSession.now 1초 간격 update.
   useEffect(() => {
@@ -411,6 +485,7 @@ function App() {
                 newNoteRequestKey={newNoteRequestKey}
                 mainSession={mainSession}
                 updateMainSession={updateMainSession}
+                restoreQueueResult={restoreQueueResult}
                 onPipelineStart={handlePipelineStart}
                 onPipelineStop={handlePipelineStop}
               />

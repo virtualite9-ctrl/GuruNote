@@ -16,6 +16,7 @@
 # =============================================================================
 
 mlx-whisper>=0.4
+-r requirements-diarization.txt
 # pyannote.audio 4.0.0 에서 `torchaudio` → `torchcodec` 로 마이그레이션.
 # 3.x 는 새 torchaudio (>=2.8) 와 호환 불가 (`module 'torchaudio' has no
 # attribute 'AudioMetaData'` 에러). 반드시 4.0 이상으로 업그레이드.

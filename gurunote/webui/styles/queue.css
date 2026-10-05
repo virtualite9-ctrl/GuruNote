@@ -1,0 +1,18 @@
+/* Additive batch/live UI; native desktop layout and vendored assets. */
+.input-row { flex-wrap: wrap; align-items: flex-start; }
+textarea.url-input { min-height: 104px; height: auto; resize: vertical; border-radius: 16px; padding: 12px 16px; line-height: 1.55; min-width: 260px; }
+.options-row { flex-wrap: wrap; align-items: flex-start; }
+.diarization-select { min-height: 34px; max-width: 100%; border: 1px solid var(--gn-border-subtle, #d8dce4); border-radius: 10px; padding: 6px 10px; color: var(--gn-on-surface, #24262a); background: var(--gn-surface, white); font: inherit; font-size: 13px; }
+.queue-hint { color: var(--gn-on-surface-muted, #687082); font-size: 12px; line-height: 1.65; display: block; max-width: 100%; }
+.queue-card .card__header { flex-wrap: wrap; gap: 10px; }
+.queue-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.queue-actions .btn, .queue-item .btn { min-height: 32px; padding: 5px 12px; font-size: 12px; }
+.queue-list { max-height: 280px; overflow-y: auto; }
+.queue-item { display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-bottom: 1px solid var(--gn-border-subtle, #e4e8ef); min-width: 0; font-size: 13px; }
+.queue-item--active { background: rgba(59,130,246,.07); border-radius: 8px; }
+.queue-index { flex: 0 0 20px; color: var(--gn-on-surface-muted, #687082); }
+.queue-source { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-state { white-space: nowrap; color: var(--gn-on-surface-muted, #687082); }
+.result-preview-badge { padding: 10px 12px; margin-bottom: 12px; border-radius: 8px; background: rgba(59,130,246,.08); color: var(--gn-on-surface, #252b36); font-size: 12px; line-height: 1.6; }
+.progress__meta { flex-wrap: wrap; gap: 8px; }
+@media (max-width: 1000px) { .queue-item { flex-wrap: wrap; } .queue-source { flex-basis: 65%; } }

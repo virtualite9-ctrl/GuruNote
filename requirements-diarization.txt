@@ -1,0 +1,9 @@
+# Optional ungated local diarization; upstream package includes pretrained.pt.
+# Source / Apache-2.0: https://github.com/resemble-ai/Resemblyzer
+Resemblyzer==0.1.4
+# Retain PyTorch's modern default weights-only checkpoint loading. No safety override.
+torch>=2.6
+librosa>=0.10
+# webrtcvad 2.0.10 imports pkg_resources, removed in setuptools 81+.
+# Keep the explicit runtime compatibility bound; do not modify global packages.
+setuptools>=68,<81

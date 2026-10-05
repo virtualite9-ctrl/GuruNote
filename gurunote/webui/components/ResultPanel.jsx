@@ -23,7 +23,7 @@
  * Babel standalone scope 회피: 모든 top-level const 는 RP_ 접두사.
  */
 
-const { useState: RP_useState } = React;
+const { useState: RP_useState, useEffect: RP_useEffect, useRef: RP_useRef } = React;
 
 const RP_TABS = [
   { id: 'summary', label: '요약',     icon: 'auto_awesome' },
@@ -42,6 +42,13 @@ function ResultPanel({ result, log }) {
   const [activeTab, setActiveTab] = RP_useState('summary');
   // 보기 전용 타임스탬프 토글 — 기본 보임(현 동작). 클라이언트 표시 상태, 영속화 부재.
   const [showTimestamps, setShowTimestamps] = RP_useState(true);
+  const autoPreview = RP_useRef(true);
+  const previewJob = RP_useRef(null);
+  RP_useEffect(() => {
+    if (!result?.is_partial) return;
+    if (previewJob.current !== result.job_id) { previewJob.current = result.job_id; autoPreview.current = true; }
+    if (autoPreview.current) setActiveTab(result.summary_md ? 'summary' : result.korean_transcript ? 'korean' : 'english');
+  }, [result]);
 
   // log: array (live) 또는 string (History) 정규화 → array
   const logLines = Array.isArray(log)
@@ -79,13 +86,14 @@ function ResultPanel({ result, log }) {
 
   return (
     <>
+      {result?.is_partial && <div className="result-preview-badge" role="status">생성 중 미리보기{result.completed_chunks ? ` · ${result.completed_chunks}/${result.total_chunks}청크` : ''} — 최종 후처리로 내용이 바뀔 수 있습니다.</div>}
       <div className="result-tabs">
         {RP_TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
             className={'result-tab' + (activeTab === tab.id ? ' result-tab--active' : '')}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => { autoPreview.current = false; setActiveTab(tab.id); }}
           >
             <span className="msi" style={{ fontSize: 16, marginRight: 6 }}>{tab.icon}</span>
             {tab.label}
@@ -118,10 +126,13 @@ function ResultPanel({ result, log }) {
         )}
       </div>
 
-      {activeTab === 'summary' && summaryHtml && (
+      {activeTab === 'summary' && result?.is_partial && (
+        <div className="result-transcript">{result.summary_md || '요약 생성 전입니다. 한국어·영어 원문 탭에서 중간 결과를 확인하세요.'}</div>
+      )}
+      {activeTab === 'summary' && !result?.is_partial && summaryHtml && (
         <div className="result-rendered" dangerouslySetInnerHTML={{ __html: summaryHtml }} />
       )}
-      {activeTab === 'summary' && !summaryHtml && (
+      {activeTab === 'summary' && !result?.is_partial && !summaryHtml && (
         <div className="result-empty">처리 완료 후 요약이 표시됩니다.</div>
       )}
 

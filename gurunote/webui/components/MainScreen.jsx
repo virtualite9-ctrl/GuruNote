@@ -131,6 +131,7 @@ function MainScreen({
   newNoteRequestKey,
   mainSession,
   updateMainSession,
+  restoreQueueResult,
   onPipelineStart,
   onPipelineStop,
 }) {
@@ -202,9 +203,9 @@ function MainScreen({
   const handleRun = () => {
     let source;
     if (selectedFile) {
-      source = { kind: 'local', value: selectedFile.path, engine: stt, provider: llm };
+      source = { kind: 'local', value: selectedFile.path, engine: stt, provider: llm, diarization_backend: mainSession.diarization || 'resemblyzer' };
     } else if (url.trim()) {
-      source = { kind: 'youtube', value: url.trim(), engine: stt, provider: llm };
+      source = url.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).map((value) => ({ kind: 'youtube', value, engine: stt, provider: llm, diarization_backend: mainSession.diarization || 'resemblyzer' }));
     } else {
       showToast('URL 또는 파일을 먼저 선택하세요.', 'warning');
       return;
@@ -215,8 +216,19 @@ function MainScreen({
   // 중지 — App.jsx 의 onPipelineStop 호출 (jobIdRef 기반 stop_pipeline)
   const handleStop = () => onPipelineStop();
 
-  const canRun = !running && (selectedFile || url.trim());
-  const elapsed = startedAt ? Math.floor((now - startedAt) / 1000) : 0;
+  const canRun = selectedFile || url.trim();
+  const elapsed = Math.floor(mainSession.elapsedSeconds || 0);
+  const viewQueueItem = async (id) => {
+    const request = {};
+    updateMainSession({ viewingQueueId: id, resultSelectionRequest: request, automaticRestoreRequest: null });
+    const qid = id || mainSession.queue?.active_queue_id;
+    const jobId = mainSession.queue?.items?.find((x) => x.queue_id === qid)?.job_id;
+    if (!qid) { updateMainSession({ result: null }); return; }
+    try {
+      const data = await window.pywebview.api.get_pipeline_queue_result(qid);
+      restoreQueueResult(data, { queueId: qid, jobId, request, viewingId: id });
+    } catch (e) { showToast(`결과 조회 실패: ${e.message || e}`, 'error'); }
+  };
 
   return (
     <div className="main-screen">
@@ -234,13 +246,13 @@ function MainScreen({
         </div>
 
         <div className="input-row">
-          <input
-            type="text"
+          <textarea
+            rows={4}
+            aria-label="여러 링크 입력"
             className={'url-input' + (dragOver ? ' url-input--drag-over' : '')}
-            placeholder="🔗  https://youtube.com/watch?v=…  또는 파일을 드래그하여 놓으세요"
+            placeholder="유튜브 링크를 한 줄에 하나씩 입력하세요. 파일도 선택할 수 있습니다."
             value={url}
             onChange={handleUrlChange}
-            disabled={running}
             onDragEnter={(e) => { e.preventDefault(); updateMainSession({ dragOver: true }); }}
             onDragOver={(e) => e.preventDefault()}
             onDragLeave={() => updateMainSession({ dragOver: false })}
@@ -251,16 +263,14 @@ function MainScreen({
             <span className="msi">folder_open</span>
             파일 선택
           </button>
-          {!running && (
-            <button type="button" className="btn btn--primary" onClick={handleRun} disabled={!canRun}>
-              <span className="msi">play_arrow</span>
-              생성하기
-            </button>
-          )}
+          <button type="button" className="btn btn--primary" onClick={handleRun} disabled={!canRun}>
+            <span className="msi">playlist_add</span>
+            대기열에 추가
+          </button>
           {running && (
             <button type="button" className="btn btn--ghost" onClick={handleStop}>
               <span className="msi">stop</span>
-              중지
+              현재 작업 중지
             </button>
           )}
         </div>
@@ -281,6 +291,16 @@ function MainScreen({
         )}
 
         <div className="options-row">
+          <div className="opt-group">
+            <div className="opt-group__label">화자분리</div>
+            <select aria-label="화자분리 방식" className="diarization-select" value={mainSession.diarization || 'resemblyzer'} onChange={(e) => updateMainSession({ diarization: e.target.value })} disabled={running}>
+              <option value="resemblyzer">토큰 없이 로컬 (근사 분리)</option>
+              <option value="auto">자동 (기존 토큰이 있으면 pyannote)</option>
+              <option value="pyannote">pyannote (HF 토큰 필요)</option>
+              <option value="none">분리하지 않음</option>
+            </select>
+            <span className="queue-hint">로컬 모드는 겹치는 말·짧은 구간에서 정확도가 낮을 수 있습니다.</span>
+          </div>
           <div className="opt-group">
             <div className="opt-group__label">STT 엔진</div>
             <div className="segmented">
@@ -313,6 +333,7 @@ function MainScreen({
         </div>
       </section>
 
+      <GNQueuePanel queueState={mainSession.queue} onView={viewQueueItem} viewing={mainSession.viewingQueueId} />
       {/* === 파이프라인 카드 === */}
       <section className="card">
         <div className="card__header">
@@ -331,6 +352,7 @@ function MainScreen({
           <div className="progress__meta">
             <span>{Math.round(pct * 100)}%</span>
             <span>{formatTime(elapsed)} 경과</span>
+            <span>예상 종료: {GNQueueFinish(mainSession.queue?.items?.find((x) => x.queue_id === mainSession.queue.active_queue_id)?.estimated_end_at)}</span>
           </div>
         </div>
       </section>
@@ -349,3 +371,26 @@ function MainScreen({
 }
 
 window.MainScreen = MainScreen;
+
+function GNQueueFinish(value) {
+  return typeof value === 'number' ? new Date(value * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '계산 중';
+}
+function GNQueuePanel({ queueState, onView, viewing }) {
+  const q = queueState || { items: [] };
+  const labels = { queued: '대기', starting: '시작 중', running: '처리 중', stopping: '중지 대기', completed: '완료', failed: '실패', stopped: '중지', cancelled: '제거' };
+  const action = async (method, id) => { try { await window.pywebview.api[method](id); } catch (e) { window.showToast?.(e.message || String(e), 'error'); } };
+  return <section className="card queue-card" aria-label="작업 대기열">
+    <div className="card__header"><div className="card__title">작업 대기열</div><div className="queue-actions">
+      <button type="button" className="btn btn--ghost" onClick={() => action(q.paused ? 'resume_pipeline_queue' : 'pause_pipeline_queue')}>{q.paused ? '대기열 계속' : '대기열 일시정지'}</button>
+      <button type="button" className="btn btn--ghost" onClick={() => action('clear_finished_pipeline_queue')}>완료 항목 비우기</button>
+    </div></div>
+    <p className="queue-hint">전체 예상 종료: <strong>{GNQueueFinish(q.estimated_end_at)}</strong> · 최근 처리시간 기준 참고값이며 영상 길이에 따라 달라집니다.</p>
+    {!q.items.length && <p className="queue-hint">등록된 작업이 없습니다. 여러 링크를 한 번에 추가할 수 있습니다.</p>}
+    <div className="queue-list">{q.items.map((x, i) => <div className={'queue-item' + (x.queue_id === q.active_queue_id ? ' queue-item--active' : '')} key={x.queue_id}>
+      <span className="queue-index">{i + 1}</span><span className="queue-source" title={x.source.value}>{x.source.value}</span><span className="queue-state">{labels[x.status] || x.status}</span>
+      {x.status === 'queued' && <button type="button" className="btn btn--ghost" aria-label={`${i + 1}번 대기 작업 제거`} onClick={() => action('cancel_pipeline_queue_item', x.queue_id)}>제거</button>}
+      {x.has_result && <button type="button" className="btn btn--ghost" onClick={() => onView(x.queue_id)}>결과 보기</button>}
+    </div>)}</div>
+    {viewing && <button type="button" className="btn btn--ghost" onClick={() => onView(null)}>진행 중 결과로 돌아가기</button>}
+  </section>;
+}

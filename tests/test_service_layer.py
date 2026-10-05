@@ -25,7 +25,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SERVICE_PY = ROOT / "gurunote" / "service.py"
 BRIDGE_PY = ROOT / "gurunote" / "webui" / "bridge.py"
 WINDOW_ONLY = ("pick_file", "start_pipeline", "select_obsidian_vault_dir",
-               "save_result_as", "bind_window", "_require_window")
+               "save_result_as", "bind_window", "_require_window", "_validate_batch_source",
+               "enqueue_pipeline_batch", "get_pipeline_queue", "get_pipeline_queue_result",
+               "cancel_pipeline_queue_item", "pause_pipeline_queue", "resume_pipeline_queue",
+               "clear_finished_pipeline_queue")
 
 
 def public_methods(cls):

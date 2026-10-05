@@ -41,6 +41,7 @@ def translate_transcript(
     video_context: Optional[dict] = None,
     stop_event=None,  # threading.Event — chunk 사이 polling
     search_fn: Optional[Callable] = None,  # 검색 그라운딩 의존성 주입 (인명·회사명 교정)
+    on_partial: Optional[Callable[[dict], None]] = None,
 ) -> str:
     """
     Transcript → 한국어로 번역된 스크립트 (문자열).
@@ -146,6 +147,14 @@ def translate_transcript(
             seen_speakers=seen_speakers,
         )
         translated_parts.append(translated)
+        if on_partial is not None:
+            try:
+                on_partial({"text": "\n\n".join(translated_parts),
+                            "completed_chunks": i, "total_chunks": len(chunks)})
+            except Exception:
+                if stop_event is not None and stop_event.is_set():
+                    raise
+                log("미리보기 전달 실패 — 번역은 계속합니다.")
 
         # Phase 2 — chunk 출력의 speaker line prefix entity 추출 + cache 갱신.
         if config.enable_phase2:

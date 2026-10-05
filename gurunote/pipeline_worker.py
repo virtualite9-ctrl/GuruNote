@@ -49,17 +49,22 @@ class PipelineWorker:
         *,
         youtube_url: str = "",
         local_file: str = "",
+        diarization_backend: Optional[str] = None,
     ):
         self.youtube_url = youtube_url
         self.local_file = local_file
         self.engine = engine
         self.provider = provider
+        self.diarization_backend = diarization_backend
         self.job_id = new_job_id()
         self._job_logger = JobLogger(self.job_id)
         self._start_time: Optional[float] = None
         self.msg_queue: queue.Queue[str] = queue.Queue()
         self.progress_queue: queue.Queue[float] = queue.Queue()
         self.result_queue: queue.Queue[dict] = queue.Queue()
+        self.partial_queue: queue.Queue[dict] = queue.Queue(maxsize=1)
+        self._preview_state: dict = {}
+        self._preview_revision = 0
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
@@ -74,6 +79,23 @@ class PipelineWorker:
 
     def _set_progress(self, pct: float) -> None:
         self.progress_queue.put(max(0.0, min(1.0, pct)))
+
+    def _publish_partial(self, **fields) -> None:
+        if self._stop_event.is_set():
+            raise RuntimeError("사용자가 작업 중지를 요청했습니다.")
+        self._preview_state.update(fields)
+        self._preview_revision += 1
+        snapshot = dict(self._preview_state, revision=self._preview_revision,
+                        is_partial=True, job_id=self.job_id)
+        while True:
+            try:
+                self.partial_queue.put_nowait(snapshot)
+                return
+            except queue.Full:
+                try:
+                    self.partial_queue.get_nowait()
+                except queue.Empty:
+                    pass
 
     def request_stop(self) -> None:
         self._stop_event.set()
@@ -135,11 +157,15 @@ class PipelineWorker:
                         break
 
             self._log("[Step 2] 화자 분리 STT 중...")
+            stt_extra = {}
+            if self.diarization_backend is not None:
+                stt_extra["diarization_backend"] = self.diarization_backend
             transcript = transcribe(
                 audio.audio_path,
                 engine=effective_engine,
                 progress=_stt_progress,
                 stop_event=self._stop_event,
+                **stt_extra,
             )
             self._log(
                 f"[Step 2] OK: {len(transcript.segments)} 세그먼트, "
@@ -152,19 +178,29 @@ class PipelineWorker:
             # 호출 불필요. to_plaintext 가 speaker + timestamp 보존 형식 그대로 반환.
             llm_cfg = LLMConfig.from_env(provider=self.provider)
             detected_lang = (transcript.language or "").lower()
+            self._publish_partial(stage="stt", video_title=audio.video_title,
+                                  english_transcript="" if detected_lang == "ko" else transcript.to_plaintext(),
+                                  korean_transcript=transcript.to_plaintext() if detected_lang == "ko" else "")
             if detected_lang == "ko":
                 self._log("[Step 3] 한국어 detected — 번역 단계 skip.")
                 translated = transcript.to_plaintext()
                 self._log(f"[Step 3] OK: 한국어 원본 사용 ({len(translated):,} chars)")
             else:
                 self._log("[Step 3] LLM 한국어 번역 중...")
+                def preview_chunk(data):
+                    self._publish_partial(stage="translation", korean_transcript=data["text"],
+                                          completed_chunks=data["completed_chunks"],
+                                          total_chunks=data["total_chunks"])
+                    self._set_progress(0.55 + 0.23 * data["completed_chunks"] / data["total_chunks"])
                 translated = translate_transcript(
                     transcript, config=llm_cfg, progress=self._log,
                     video_context=video_ctx,
                     stop_event=self._stop_event,
+                    on_partial=preview_chunk,
                 )
                 self._log(f"[Step 3] OK: 번역 완료 ({len(translated):,} chars)")
             self._set_progress(0.78)
+            self._publish_partial(stage="translation", korean_transcript=translated)
 
             # Step 4
             self._log("[Step 4] GuruNote 요약본 생성 중...")
@@ -178,6 +214,7 @@ class PipelineWorker:
             )
             self._log("[Step 4] OK: 요약 완료")
             self._set_progress(0.88)
+            self._publish_partial(stage="summary", summary_md=summary_md)
 
             # Step 4.5 — 메타데이터 자동 추출 (제목/분야/태그)
             self._log("[Step 4.5] 분류 메타데이터(제목/분야/태그) 추출 중...")
@@ -284,7 +321,7 @@ class PipelineWorker:
                 status="failed",
                 error_message=str(exc),
             )
-            self.result_queue.put({"ok": False, "error": str(exc)})
+            self.result_queue.put({"ok": False, "error": str(exc), "stopped": self._stop_event.is_set()})
         finally:
             self._job_logger.close()
             cleanup_dir(tmp_dir)
