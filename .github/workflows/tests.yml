@@ -56,3 +56,19 @@ jobs:
 
       - name: Run unit tests
         run: python -m pytest -m "not slow" -q
+
+  queue-ui:
+    name: Queue result restoration (Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run production callback race regressions
+        run: node tests/test_queue_restore.cjs

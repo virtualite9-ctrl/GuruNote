@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Optional
+import threading
+import json
 
 from gurunote.service import GuruNoteService
 
@@ -24,6 +26,90 @@ class Api(GuruNoteService):
 
     def __init__(self) -> None:
         self._window = None  # set via bind_window()
+        self._serial_queue = None
+        self._queue_lock = threading.Lock()
+
+    @property
+    def _queue(self):
+        with self._queue_lock:
+            if self._serial_queue is None:
+                from gurunote.webui.session import PipelineSession
+                from gurunote.webui.work_queue import PipelineQueue
+                def emit(snapshot):
+                    self._require_window().evaluate_js(
+                        'window.__emit("queue_changed", ' + json.dumps(snapshot, ensure_ascii=False) + ');')
+                self._serial_queue = PipelineQueue(
+                    lambda source, done, observed: PipelineSession(
+                        self._require_window(), source, on_terminal=done, on_event=observed), emit)
+            return self._serial_queue
+
+    def _validate_batch_source(self, source):
+        if not isinstance(source, dict):
+            raise ValueError("source must be a dict")
+        for key in ("kind", "value", "engine", "provider"):
+            if key not in source:
+                raise ValueError("source missing required key: " + key)
+        value = source["value"]
+        if not isinstance(value, str):
+            raise ValueError("source.value must be text")
+        value = value.strip()
+        from gurunote.audio import is_probably_youtube_url, is_supported_local_file
+        if source["kind"] == "youtube":
+            if not is_probably_youtube_url(value):
+                raise RuntimeError("INVALID_URL:유튜브 URL 형식이 아닙니다.")
+        elif source["kind"] == "local":
+            if not Path(value).is_file() or not is_supported_local_file(value):
+                raise RuntimeError("INVALID_LOCAL_FILE:" + value)
+        else:
+            raise ValueError("source.kind must be youtube or local")
+        import os
+        key_map = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY",
+                   "gemini": "GOOGLE_API_KEY", "openai_compatible": "OPENAI_BASE_URL"}
+        required = key_map.get(source["provider"])
+        if required and not os.environ.get(required):
+            raise RuntimeError("API_KEY_MISSING:" + required)
+        result = {key: source[key] for key in ("kind", "engine", "provider")}
+        result["value"] = value
+        mode = source.get("diarization_backend")
+        if mode is not None:
+            if mode not in ("auto", "resemblyzer", "pyannote", "none"):
+                raise ValueError("Invalid diarization backend")
+            result["diarization_backend"] = mode
+        return result
+
+    def enqueue_pipeline_batch(self, sources):
+        self._require_window()
+        if not isinstance(sources, list) or len(sources) > 100:
+            raise ValueError("sources must be a list with at most 100 entries")
+        valid = []; errors = []
+        for index, source in enumerate(sources):
+            try:
+                valid.append(self._validate_batch_source(source))
+            except Exception as exc:
+                errors.append({"index": index, "error": str(exc)})
+        result = self._queue.enqueue(valid)
+        result["errors"] = errors
+        result["ok"] = bool(valid) or not errors
+        return result
+
+    def get_pipeline_queue(self):
+        self._require_window()
+        return self._queue.snapshot()
+
+    def get_pipeline_queue_result(self, queue_id):
+        return self._queue.get_result(queue_id)
+
+    def cancel_pipeline_queue_item(self, queue_id):
+        return {"ok": self._queue.cancel(queue_id), "queue": self._queue.snapshot()}
+
+    def pause_pipeline_queue(self):
+        return self._queue.pause()
+
+    def resume_pipeline_queue(self):
+        return self._queue.resume()
+
+    def clear_finished_pipeline_queue(self):
+        return {"removed": self._queue.clear_finished(), "queue": self._queue.snapshot()}
 
     def bind_window(self, window: Any) -> None:
         """Attach the pywebview Window so the bridge can call its methods."""

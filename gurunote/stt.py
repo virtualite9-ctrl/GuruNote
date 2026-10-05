@@ -2,11 +2,12 @@
 Step 2: 음성 인식 + 화자 분리 (Speaker Diarization).
 
 엔진 선택 우선순위 (`auto` 모드):
-  1. NVIDIA GPU (CUDA) → **WhisperX** (Distil-Whisper + pyannote).
+  1. NVIDIA GPU (CUDA) → **WhisperX** (Distil-Whisper + 선택형 화자 분리).
      청크 분할 처리로 VRAM ~6GB 에서 안정 동작.
   2. Apple Silicon (M1~M5) → **MLX Whisper** (`gurunote.stt_mlx`).
-     Metal/MPS 가속, pyannote 화자 분리도 MPS 에서 실행.
-  3. 위 둘 다 안 되면 → **AssemblyAI Cloud API** 로 폴백.
+     Metal/MPS 가속, 토큰 없는 화자 분리는 로컬 Resemblyzer CPU 추론.
+  3. Resemblyzer 선택 시 로컬 실패를 전파한다. 그 외 기존 모드는
+     **AssemblyAI Cloud API** 로 폴백할 수 있다.
 
 세 엔진 모두 결과를 `gurunote.types.Transcript` 형태로 정규화해 반환하므로
 LLM/요약 단계는 어느 엔진을 썼는지 신경 쓰지 않아도 된다.
@@ -30,6 +31,10 @@ if platform.system() == "Windows":
 from typing import Callable, List, Optional
 
 from gurunote.types import Segment, Transcript
+from gurunote.diarization import (
+    LocalDiarizationError, check_cancelled, diarize_local_segments, resolve_backend,
+    huggingface_token, labels_by_first_appearance,
+)
 
 ProgressFn = Callable[[str], None]
 
@@ -59,6 +64,7 @@ def transcribe(
     progress: Optional[ProgressFn] = None,
     hotwords: Optional[List[str]] = None,
     stop_event: Optional[object] = None,
+    diarization_backend: Optional[str] = None,
 ) -> Transcript:
     """
     오디오 파일을 화자 분리된 Transcript 로 변환한다.
@@ -69,6 +75,7 @@ def transcribe(
         progress: 진행 메시지 콜백
         hotwords: 도메인 핫워드. None 이면 IT_AI_HOTWORDS 기본값 사용.
         stop_event: 중지 이벤트 (GUI 의 threading.Event)
+        diarization_backend: auto | resemblyzer | pyannote | none (로컬 STT용)
 
     Returns:
         Transcript
@@ -76,20 +83,25 @@ def transcribe(
     log = progress or (lambda _msg: None)
     engine = (engine or "auto").lower().strip()
     hotwords = hotwords if hotwords is not None else IT_AI_HOTWORDS
+    backend = resolve_backend(diarization_backend)
+    check_cancelled(stop_event)
 
     if engine == "whisperx":
-        result = _transcribe_whisperx(audio_path, log=log, hotwords=hotwords)
+        result = _transcribe_whisperx(audio_path, log=log, hotwords=hotwords,
+                                     diarization_backend=backend, stop_event=stop_event)
         _assert_transcript_not_empty(result)
         return result
 
     if engine == "mlx":
         from gurunote.stt_mlx import transcribe_mlx
-        result = transcribe_mlx(audio_path, log=log, hotwords=hotwords)
+        result = transcribe_mlx(audio_path, log=log, hotwords=hotwords,
+                                diarization_backend=backend, stop_event=stop_event)
         _assert_transcript_not_empty(result)
         return result
 
     if engine == "assemblyai":
         result = _transcribe_assemblyai(audio_path, log=log)
+        _apply_cloud_backend_metadata(result, backend, stop_event)
         _assert_transcript_not_empty(result)
         return result
 
@@ -97,27 +109,57 @@ def transcribe(
     if _check_cuda_ready():
         try:
             log("[auto] NVIDIA GPU 감지 — WhisperX 로 전사를 시도합니다.")
-            result = _transcribe_whisperx(audio_path, log=log, hotwords=hotwords)
+            result = _transcribe_whisperx(audio_path, log=log, hotwords=hotwords,
+                                         diarization_backend=backend, stop_event=stop_event)
             _assert_transcript_not_empty(result)
             return result
+        except LocalDiarizationError:
+            raise
         except Exception as exc:  # noqa: BLE001
+            if backend == "resemblyzer":
+                raise LocalDiarizationError(
+                    "Local STT failed with Resemblyzer selected; cloud fallback is disabled"
+                ) from exc
             log(f"WhisperX 실패 ({exc}). 다음 엔진으로 폴백합니다.")
     elif _is_mlx_ready():
         try:
             log("[auto] Apple Silicon 감지 — MLX Whisper 로 전사를 시도합니다.")
             from gurunote.stt_mlx import transcribe_mlx
-            result = transcribe_mlx(audio_path, log=log, hotwords=hotwords)
+            result = transcribe_mlx(audio_path, log=log, hotwords=hotwords,
+                                    diarization_backend=backend, stop_event=stop_event)
             _assert_transcript_not_empty(result)
             return result
+        except LocalDiarizationError:
+            raise
         except Exception as exc:  # noqa: BLE001
+            if backend == "resemblyzer":
+                raise LocalDiarizationError(
+                    "Local STT failed with Resemblyzer selected; cloud fallback is disabled"
+                ) from exc
             log(f"MLX Whisper 실패 ({exc}). AssemblyAI 로 폴백합니다.")
     else:
+        if backend == "resemblyzer":
+            raise LocalDiarizationError(
+                "Resemblyzer selected but no local STT engine is available; "
+                "select engine='assemblyai' explicitly to use cloud STT"
+            )
         hint = _auto_fallback_hint()
         log(f"[auto] 로컬 GPU STT 미사용{hint} — AssemblyAI Cloud API 로 직행합니다.")
 
+    check_cancelled(stop_event)
     result = _transcribe_assemblyai(audio_path, log=log)
+    _apply_cloud_backend_metadata(result, backend, stop_event)
     _assert_transcript_not_empty(result)
     return result
+
+
+def _apply_cloud_backend_metadata(result: Transcript, backend: str, stop_event=None) -> None:
+    check_cancelled(stop_event)
+    diarization = {"backend": "assemblyai"}
+    if backend == "none":
+        result.segments, diarization = diarize_local_segments(
+            "", result.segments, backend="none", stop_event=stop_event)
+    result.raw = {**(result.raw or {}), "diarization": diarization}
 
 
 def _is_mlx_ready() -> bool:
@@ -159,7 +201,7 @@ def _assert_transcript_not_empty(transcript: Transcript) -> None:
 
 
 # =============================================================================
-# WhisperX 엔진 (Distil-Whisper + pyannote 화자 분리)
+# WhisperX 엔진 (Distil-Whisper + 선택형 화자 분리)
 # =============================================================================
 def is_whisperx_installed() -> bool:
     try:
@@ -256,9 +298,13 @@ def _ensure_model_local(model_name: str, log: ProgressFn) -> str:
 
 
 def _transcribe_whisperx(
-    audio_path: str, log: ProgressFn, hotwords: List[str]
+    audio_path: str, log: ProgressFn, hotwords: List[str],
+    diarization_backend: Optional[str] = None,
+    stop_event: Optional[object] = None,
 ) -> Transcript:
     """WhisperX 로 전사 + 화자 분리."""
+    backend = resolve_backend(diarization_backend)
+    check_cancelled(stop_event)
     import torch
 
     # pyannote / torchcodec / huggingface 의 무해한 경고 억제
@@ -313,7 +359,9 @@ def _transcribe_whisperx(
 
     log("전사 중 (청크 분할 처리)...")
     audio = whisperx.load_audio(audio_path)
+    check_cancelled(stop_event)
     result = model.transcribe(audio, batch_size=batch_size)
+    check_cancelled(stop_event)
     log(f"전사 완료 — {len(result.get('segments', []))} 세그먼트")
 
     # 2. 워드 레벨 타임스탬프 정렬
@@ -324,6 +372,7 @@ def _transcribe_whisperx(
         result["segments"], model_a, metadata, audio, device,
         return_char_alignments=False,
     )
+    check_cancelled(stop_event)
 
     # 모델 메모리 해제 (다음 단계 전에)
     del model, model_a
@@ -331,8 +380,23 @@ def _transcribe_whisperx(
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
+    if backend in {"resemblyzer", "none"}:
+        log("화자 분리: " + ("none (비활성)" if backend == "none" else
+                            "로컬 Resemblyzer, ASR 구간별 근사 분리; 겹침 미지원"))
+        segments, diarization = diarize_local_segments(
+            audio_path,
+            [Segment("", float(seg.get("start", 0.0)), float(seg.get("end", 0.0)),
+                     seg.get("text") or "") for seg in result.get("segments", [])],
+            backend=backend, stop_event=stop_event,
+        )
+        return Transcript(
+            segments=segments, engine="whisperx", language=lang,
+            raw={"language": lang, "model": model_name, "diarization": diarization},
+        )
+
     # 3. 화자 분리 (HuggingFace 토큰 + 모델 사용 동의 필요)
-    hf_token = os.environ.get("HUGGINGFACE_TOKEN", "").strip()
+    diarization = {"backend": "pyannote", "status": "unavailable"}
+    hf_token = huggingface_token()
     if hf_token:
         log("화자 분리 중 (pyannote)...")
         try:
@@ -345,14 +409,16 @@ def _transcribe_whisperx(
                 diarize_model = _DiarPipeline(token=hf_token, device=device)
             except TypeError:
                 diarize_model = _DiarPipeline(use_auth_token=hf_token, device=device)
-            diarize_segments = diarize_model(audio)
-            result = whisperx.assign_word_speakers(diarize_segments, result)
+            diarized_turns = diarize_model(audio)
+            result = whisperx.assign_word_speakers(diarized_turns, result)
+            diarization["status"] = "completed"
             del diarize_model
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             log("화자 분리 완료")
         except Exception as diar_exc:
+            diarization["status"] = "failed"
             err_msg = str(diar_exc)
             if "401" in err_msg or "gated" in err_msg.lower() or "restricted" in err_msg.lower():
                 log(
@@ -371,6 +437,7 @@ def _transcribe_whisperx(
             "  에서 모델 사용에 동의하세요."
         )
 
+    check_cancelled(stop_event)
     # 4. 공통 Segment 형태로 변환
     segments: List[Segment] = []
     for seg in result.get("segments", []):
@@ -390,13 +457,14 @@ def _transcribe_whisperx(
             text=(seg.get("text") or "").strip(),
         ))
 
+    segments = labels_by_first_appearance(segments)
     log(f"WhisperX 전사 완료 — {len(segments)} 세그먼트, "
         f"{len(set(s.speaker for s in segments))} 화자")
 
     return Transcript(
         segments=segments,
         engine="whisperx",
-        raw={"language": lang, "model": model_name},
+        raw={"language": lang, "model": model_name, "diarization": diarization},
     )
 
 

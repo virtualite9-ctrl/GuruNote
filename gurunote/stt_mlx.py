@@ -2,8 +2,9 @@
 Apple Silicon (M1/M2/M3/M4/M5) GPU 로컬 STT 엔진.
 
 `mlx-whisper` (Apple MLX 프레임워크) 로 Whisper 추론을 수행하고,
-`pyannote.audio` 화자 분리 파이프라인을 MPS(Metal Performance Shaders)
-디바이스에서 실행해 화자 라벨을 부여한다.
+HF 토큰이 있으면 기존 `pyannote.audio` 경로로 화자를 분리한다.
+토큰 없는 auto 모드는 로컬 Resemblyzer CPU 임베딩을 ASR 구간별로
+클러스터링한다. 이 근사 모드는 겹침과 구간 내부 화자 전환을 분리하지 못한다.
 
 WhisperX(CUDA) 와 동일한 `gurunote.types.Transcript` 형태로 결과를 반환하므로
 LLM/요약 단계는 어떤 엔진이 사용됐는지 신경 쓰지 않아도 된다.
@@ -11,8 +12,8 @@ LLM/요약 단계는 어떤 엔진이 사용됐는지 신경 쓰지 않아도 �
 기본 모델:
     - Whisper:    `mlx-community/whisper-large-v3-mlx`
                   (`MLX_WHISPER_MODEL` 환경변수로 오버라이드)
-    - Diarization: `pyannote/speaker-diarization-3.1`
-                  (HUGGINGFACE_TOKEN 필요, 모델 사용 동의 필요)
+    - Diarization: GURUNOTE_DIARIZATION_BACKEND=auto/resemblyzer/pyannote/none
+                  (pyannote는 HUGGINGFACE_TOKEN 및 모델 사용 동의 필요)
 """
 
 from __future__ import annotations
@@ -23,6 +24,10 @@ import warnings
 from typing import Callable, Dict, List, Optional, Tuple
 
 from gurunote.types import Segment, Transcript
+from gurunote.diarization import (
+    check_cancelled, diarize_local_segments, huggingface_token,
+    labels_by_first_appearance, resolve_backend,
+)
 
 ProgressFn = Callable[[str], None]
 
@@ -244,6 +249,8 @@ def transcribe_mlx(
     audio_path: str,
     log: ProgressFn,
     hotwords: List[str],
+    diarization_backend: Optional[str] = None,
+    stop_event: Optional[object] = None,
 ) -> Transcript:
     """
     Apple Silicon GPU 로컬 STT 실행.
@@ -251,6 +258,8 @@ def transcribe_mlx(
     Returns:
         Transcript (engine="mlx")
     """
+    backend = resolve_backend(diarization_backend)
+    check_cancelled(stop_event)
     if not is_apple_silicon():
         raise RuntimeError(
             "MLX 엔진은 macOS Apple Silicon (M1/M2/M3/M4/M5) 에서만 동작합니다."
@@ -285,17 +294,36 @@ def transcribe_mlx(
         transcribe_kwargs["initial_prompt"] = initial_prompt
 
     result = mlx_whisper.transcribe(audio_path, **transcribe_kwargs)
+    check_cancelled(stop_event)
     raw_segments = result.get("segments", []) or []
     language = result.get("language", "en")
     log(f"전사 완료 — {len(raw_segments)} 세그먼트, 언어={language}")
 
+    if backend in {"resemblyzer", "none"}:
+        log("화자 분리: " + ("none (비활성)" if backend == "none" else
+                            "로컬 Resemblyzer, ASR 구간별 근사 분리; 겹침 미지원"))
+        segments, diarization = diarize_local_segments(
+            audio_path,
+            [Segment("", float(seg.get("start", 0.0)), float(seg.get("end", 0.0)),
+                     seg.get("text") or "") for seg in raw_segments],
+            backend=backend, stop_event=stop_event,
+        )
+        return Transcript(
+            segments=segments, engine="mlx", language=language,
+            raw={"language": language, "model": model_repo,
+                 "segment_resplit": False, "diarization": diarization},
+        )
+
     # 2. 화자 분리 (선택: HF 토큰 + 모델 동의 필요)
+    diarization = {"backend": "pyannote", "status": "unavailable"}
     diarization_turns: List[Tuple[float, float, str]] = []
-    hf_token = os.environ.get("HUGGINGFACE_TOKEN", "").strip()
+    hf_token = huggingface_token()
     if hf_token:
         try:
             diarization_turns = _diarize_with_pyannote(audio_path, hf_token, log)
+            diarization["status"] = "completed" if diarization_turns else "unassigned"
         except Exception as exc:  # noqa: BLE001
+            diarization["status"] = "failed"
             err_msg = str(exc)
             if "401" in err_msg or "gated" in err_msg.lower() or "restricted" in err_msg.lower():
                 log(
@@ -324,6 +352,7 @@ def transcribe_mlx(
             "  에서 모델 사용에 동의하세요."
         )
 
+    check_cancelled(stop_event)
     # 5/24 — 의미 단위 재분할 (GURUNOTE_SEGMENT_RESPLIT 토글, 기본 on).
     # Whisper segment 경계는 음성 신호 기반이라 의미 단위 부재. 재분할 on 시
     # word-level 끝 검사로 미완 segment 를 다음과 병합 → D leak 해소, 2-pass
@@ -377,6 +406,7 @@ def transcribe_mlx(
             f"제거 ({len(raw_segments)} → {len(segments)})"
         )
 
+    segments = labels_by_first_appearance(segments)
     speaker_count = len({s.speaker for s in segments})
     log(f"MLX 전사 완료 — {len(segments)} 세그먼트, {speaker_count} 화자")
 
@@ -385,7 +415,7 @@ def transcribe_mlx(
         engine="mlx",
         language=language,
         raw={"language": language, "model": model_repo,
-              "segment_resplit": resplit_on},
+              "segment_resplit": resplit_on, "diarization": diarization},
     )
 
 
