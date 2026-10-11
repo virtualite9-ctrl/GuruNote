@@ -7,6 +7,27 @@
 
 ## [Unreleased]
 
+## [1.3.0.0] - 2026-10-11
+
+### Added
+
+- 권장 React/PyWebView UI 런처를 OS별로 통일 — `run_webview.sh`(macOS/Linux, `.venv` 자동 감지),
+  `run_webview.bat`(Windows, `.venv\Scripts\python.exe` 직접 호출).
+- `.gitattributes` 신규 — `*.sh`/`*.command`=LF, `*.bat`=CRLF 고정. Windows 체크아웃에서 셸
+  스크립트가 CRLF 가 되어 Linux shebang 이 깨지는 것을 방지.
+
+### Changed
+
+- 단위 테스트 CI(`tests.yml`)를 `[ubuntu, windows, macos] × [3.10, 3.11, 3.12]` 3-OS 매트릭스로 확장.
+  경로 구분자·파일 인코딩·줄바꿈 등 플랫폼 회귀 포착.
+- README 실행/빠른 시작/프로젝트 구조를 OS별 런처로 정리("모든 OS python3" 오해 제거).
+
+### Fixed
+
+- Windows 에서 깨지던 `test_entity_cache_writes_land_in_the_isolated_directory` — `_save_entity_cache`
+  를 옛 시그니처로 호출해 `video_id` 에 dict 를 넘겨 파일명에 `:` 가 섞였다. POSIX 는 통과하지만
+  Windows 는 NTFS 대체 데이터 스트림으로 새어 실패. 실제 호출 규약(파일명 안전 문자열)에 맞춰 교정.
+
 ## [1.2.0.0] - 2026-10-11
 
 ### Added
@@ -2109,7 +2130,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.2.0.0...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.3.0.0...HEAD
+[1.3.0.0]: https://github.com/avlp12/GuruNote/compare/v1.2.0.0...v1.3.0.0
 [1.2.0.0]: https://github.com/avlp12/GuruNote/compare/v1.1.0.0...v1.2.0.0
 [1.1.0.0]: https://github.com/avlp12/GuruNote/compare/v1.0.0.38...v1.1.0.0
 [1.0.0.38]: https://github.com/avlp12/GuruNote/compare/v1.0.0.37...v1.0.0.38
