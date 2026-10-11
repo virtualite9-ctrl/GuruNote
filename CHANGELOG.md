@@ -21,6 +21,21 @@
 
 - README 패키징 명령·CI 설명·프로젝트 구조·비교표에 Linux 반영.
 
+## [1.2.0.0] - 2026-10-11
+
+### Added
+
+- Linux 에서 권장 React/PyWebView UI(`app_webview.py`)가 실제로 뜨도록 WebKitGTK(PyGObject) 백엔드 지원.
+  `setup.sh` 가 Linux 시스템 패키지(`gir1.2-webkit2`, `libgirepository`, `cairo`, 컴파일러)를
+  점검해 `requirements-linux.txt`(`pywebview[gtk]`)를 설치하거나, 없으면 배포판별 설치 명령을
+  안내한다(sudo 필요). 검증 단계에 WebKit2 typelib 존재 확인 추가.
+- `requirements-linux.txt` 신규 — Linux GUI 백엔드 의존성(플랫폼별 분리 패턴, `requirements-mac.txt`/`requirements-gpu.txt` 와 동일).
+
+### Changed
+
+- `app_webview.py` 가 OS별 설치 안내를 분기하고, Linux 는 `gi`/`WebKit2` 프리플라이트로 백엔드 부재 시
+  창 생성 전에 명확한 안내와 함께 종료한다.
+
 ## [1.1.0.0] - 2026-10-05
 
 ### Added
@@ -2110,6 +2125,8 @@ bash run_desktop.sh
 
 [Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.4.0.0...HEAD
 [1.4.0.0]: https://github.com/avlp12/GuruNote/compare/v1.3.0.0...v1.4.0.0
+[1.2.0.0]: https://github.com/avlp12/GuruNote/compare/v1.1.0.0...v1.2.0.0
+[1.1.0.0]: https://github.com/avlp12/GuruNote/compare/v1.0.0.38...v1.1.0.0
 [1.0.0.38]: https://github.com/avlp12/GuruNote/compare/v1.0.0.37...v1.0.0.38
 [1.0.0.37]: https://github.com/avlp12/GuruNote/compare/v1.0.0.36...v1.0.0.37
 [1.0.0.36]: https://github.com/avlp12/GuruNote/compare/v1.0.0.35...v1.0.0.36
