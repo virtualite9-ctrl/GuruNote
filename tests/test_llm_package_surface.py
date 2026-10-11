@@ -142,7 +142,16 @@ class TestPatchTargetContract:
         """
         target = tmp_path / "cache"
         monkeypatch.setattr("gurunote.llm.entities.CACHE_DIR", target)
-        llm._save_entity_cache({"key": "video-1"}, {"Sam Altman": {"korean": "샘 올트먼"}}, {})
+        # 실제 호출 규약: (video_id, video_title, entities, speakers=...).
+        # video_id 는 파일명이 되므로 반드시 파일명에 안전한 문자열이어야 한다 —
+        # dict 등을 넘기면 f"{video_id}.json" 에 ':' 가 섞여 Windows 에서 NTFS
+        # 대체 데이터 스트림으로 새고 `.json` 파일이 생기지 않는다 (POSIX 는 통과).
+        llm._save_entity_cache(
+            "video-1",
+            "Sam Altman Interview",
+            {"Sam Altman": {"korean": "샘 올트먼"}},
+            speakers={},
+        )
         written = list(target.rglob("*.json"))
         assert written, f"{target} 안에 아무것도 쓰이지 않았다"
         assert all(str(p).startswith(str(tmp_path)) for p in written)
