@@ -261,7 +261,7 @@ setup 스크립트가 순서대로 수행하는 작업:
 
 ### 📦 데스크톱 패키지 vs 소스 실행
 
-| | 데스크톱 패키지 (.exe / .dmg / .pkg) | 소스 실행 (`bash setup.sh`) |
+| | 데스크톱 패키지 (.exe / .dmg / .pkg / .tar.gz) | 소스 실행 (`bash setup.sh`) |
 |---|---|---|
 | **포함 STT 엔진** | AssemblyAI (클라우드만) | WhisperX (NVIDIA) / MLX (Apple Silicon) / AssemblyAI |
 | **로컬 GPU 가속** | ❌ (PyInstaller 번들 한계) | ✅ |
@@ -493,19 +493,23 @@ pyinstaller --windowed --onefile gui.py
 # dist/gui.app (Mac) 또는 dist/gui.exe (Windows)
 ```
 
-또는 `scripts/package_desktop.py` 로 Windows `.exe`/설치형, macOS `.app`/`.dmg`/`.pkg` 를 자동 생성:
+또는 `scripts/package_desktop.py` 로 Windows `.exe`/설치형, macOS `.app`/`.dmg`/`.pkg`,
+Linux 단일 실행 파일/`.tar.gz`/`.AppImage` 를 자동 생성:
 
 ```bash
 python scripts/package_desktop.py --target windows              # .exe
 python scripts/package_desktop.py --target windows --formats installer  # 설치형
 python scripts/package_desktop.py --target macos                # .app
 python scripts/package_desktop.py --target macos --formats dmg  # .dmg
+python scripts/package_desktop.py --target linux                # 단일 실행 파일
+python scripts/package_desktop.py --target linux --formats tar  # .tar.gz
+python scripts/package_desktop.py --target linux --formats tar appimage  # .tar.gz + .AppImage (appimagetool 필요)
 ```
 
 ### GitHub Actions 릴리스 자동화
 
-`.github/workflows/release-desktop.yml` — `v*` 태그 푸시 시 Windows/macOS 패키지를
-CI 에서 자동 빌드하고 GitHub Release 에 업로드합니다.
+`.github/workflows/release-desktop.yml` — `v*` 태그 푸시 시 Windows/macOS/Linux 패키지를
+CI 에서 자동 빌드하고 GitHub Release 에 업로드합니다 (Linux 는 `.tar.gz`).
 
 ### 업데이트 (재설치 없이)
 
@@ -590,7 +594,7 @@ GuruNote/
 ├── gui.py                      # v0.8 호환 — CustomTkinter 진입점 (PipelineWorker 클래스 보유, React 가 의존)
 ├── app.py                      # v0.8 호환 — Streamlit 웹 앱
 ├── scripts/
-│   ├── package_desktop.py      # Windows/macOS 배포 패키지 자동 생성
+│   ├── package_desktop.py      # Windows/macOS/Linux 배포 패키지 자동 생성
 │   ├── update_gurunote.py      # CLI 업데이트 진입점
 │   └── release_rehearsal_check.py  # 태그 푸시 전 릴리스 준비 체크
 └── .github/workflows/

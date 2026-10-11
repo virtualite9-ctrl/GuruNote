@@ -4,10 +4,13 @@ GuruNote 데스크톱 배포 패키징 도우미.
 목표:
 - Windows: 단일 실행 파일(.exe) + (선택) Inno Setup 설치 프로그램(.exe)
 - macOS: GuruNote.app + (선택) DMG / PKG
+- Linux: 단일 실행 파일 + (선택) tar.gz / AppImage
 
 사용 예시:
     python scripts/package_desktop.py --target windows
     python scripts/package_desktop.py --target macos --formats dmg pkg
+    python scripts/package_desktop.py --target linux --formats tar
+    python scripts/package_desktop.py --target linux --formats tar appimage
 
 ⚠️ 번들 STT 엔진 정책:
   PyInstaller 번들에는 **공통 의존성(requirements.txt) 만** 포함되며 로컬 GPU
@@ -236,11 +239,116 @@ def build_macos_pkg(app_path: Path) -> Path | None:
     return pkg_path
 
 
+def build_linux() -> Path:
+    """Linux용 단일 실행 파일 빌드 (PyInstaller --onefile).
+
+    `--windowed` 는 Linux 에서 무의미하므로 쓰지 않는다 (Windows/macOS 전용 플래그).
+    결과물은 확장자 없는 `dist/GuruNote` 실행 파일.
+    """
+    _run(
+        [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--noconfirm",
+            "--clean",
+            "--onefile",
+            "--name",
+            APP_NAME,
+            str(GUI_ENTRY),
+        ]
+    )
+    bin_path = DIST_DIR / APP_NAME
+    if not bin_path.exists():
+        raise RuntimeError(f"빌드 결과물을 찾을 수 없습니다: {bin_path}")
+    bin_path.chmod(0o755)
+    print(f"\n✅ Linux 실행 파일 생성 완료: {bin_path}")
+    return bin_path
+
+
+def build_linux_tarball(bin_path: Path) -> Path | None:
+    """실행 파일을 .tar.gz 로 묶는다 (실행 비트 보존)."""
+    import tarfile
+
+    tar_path = DIST_DIR / f"{APP_NAME}-linux.tar.gz"
+    if tar_path.exists():
+        tar_path.unlink()
+    with tarfile.open(tar_path, "w:gz") as tar:
+        # arcname 으로 경로를 떼어내고 실행 파일명만 남긴다.
+        tar.add(bin_path, arcname=APP_NAME)
+    print(f"\n✅ Linux tarball 생성 완료: {tar_path}")
+    return tar_path
+
+
+def build_linux_appimage(bin_path: Path) -> Path | None:
+    """appimagetool 이 PATH 에 있으면 AppImage 생성, 없으면 건너뛴다.
+
+    표준 CI 러너에는 appimagetool 이 없어 보통 건너뛴다 (tarball 만 산출).
+    로컬에 appimagetool 이 있으면 AppDir 를 구성해 .AppImage 를 만든다.
+    """
+    appimagetool = shutil.which("appimagetool")
+    if not appimagetool:
+        print(
+            "\n⚠️ appimagetool 을 찾지 못해 AppImage 생성은 건너뜁니다.\n"
+            "   설치: https://github.com/AppImage/AppImageKit/releases\n"
+            "   (appimagetool-x86_64.AppImage 를 PATH 의 appimagetool 로 두기)"
+        )
+        return None
+
+    appdir = BUILD_DIR / f"{APP_NAME}.AppDir"
+    shutil.rmtree(appdir, ignore_errors=True)
+    (appdir / "usr" / "bin").mkdir(parents=True, exist_ok=True)
+
+    app_bin = appdir / "usr" / "bin" / APP_NAME
+    shutil.copy2(bin_path, app_bin)
+    app_bin.chmod(0o755)
+
+    apprun = appdir / "AppRun"
+    apprun.write_text(
+        "#!/bin/bash\n"
+        'HERE="$(dirname "$(readlink -f "${0}")")"\n'
+        f'exec "$HERE/usr/bin/{APP_NAME}" "$@"\n',
+        encoding="utf-8",
+    )
+    apprun.chmod(0o755)
+
+    desktop = appdir / f"{APP_NAME}.desktop"
+    desktop.write_text(
+        "[Desktop Entry]\n"
+        f"Name={APP_NAME}\n"
+        f"Exec={APP_NAME}\n"
+        f"Icon={APP_NAME}\n"
+        "Type=Application\n"
+        "Categories=AudioVideo;Utility;\n",
+        encoding="utf-8",
+    )
+
+    # 아이콘 — 런타임 "G" 모노그램 PNG 재사용 (PIL 미설치 시 생략, appimagetool 경고만).
+    try:
+        from gurunote.app_icon import _render_icon  # noqa: PLC0415
+
+        (appdir / f"{APP_NAME}.png").write_bytes(_render_icon())
+    except Exception as exc:  # noqa: BLE001
+        print(f"   (아이콘 생략: {exc})")
+
+    appimage_path = DIST_DIR / f"{APP_NAME}-x86_64.AppImage"
+    if appimage_path.exists():
+        appimage_path.unlink()
+    env = dict(os.environ, ARCH="x86_64")
+    print(f"\n$ {appimagetool} {appdir} {appimage_path}")
+    subprocess.run([appimagetool, str(appdir), str(appimage_path)], check=True, env=env)
+    if not appimage_path.exists():
+        print("\n⚠️ appimagetool 실행은 성공했지만 예상 출력 파일을 찾지 못했습니다.")
+        return None
+    print(f"\n✅ AppImage 생성 완료: {appimage_path}")
+    return appimage_path
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="GuruNote 데스크톱 패키징 스크립트")
     parser.add_argument(
         "--target",
-        choices=["windows", "macos"],
+        choices=["windows", "macos", "linux"],
         required=True,
         help="패키징 대상 OS",
     )
@@ -249,8 +357,8 @@ def parse_args() -> argparse.Namespace:
         nargs="*",
         default=[],
         help=(
-            "추가 패키지 포맷. windows: installer / macos: dmg pkg "
-            "(예: --formats dmg pkg)"
+            "추가 패키지 포맷. windows: installer / macos: dmg pkg / "
+            "linux: tar appimage (예: --formats tar appimage)"
         ),
     )
     return parser.parse_args()
@@ -266,6 +374,14 @@ def main() -> None:
         exe_path = build_windows()
         if "installer" in args.formats:
             build_windows_installer(exe_path)
+        return
+
+    if args.target == "linux":
+        bin_path = build_linux()
+        if "tar" in args.formats:
+            build_linux_tarball(bin_path)
+        if "appimage" in args.formats:
+            build_linux_appimage(bin_path)
         return
 
     app_path = build_macos_app()
