@@ -97,6 +97,50 @@ elif [ "$STT_PROFILE" = "mac" ]; then
     $PIP install -r requirements-mac.txt
 fi
 
+# 3-ter. Linux GUI 백엔드 (PyWebView GTK/WebKit2)
+#        권장 진입점 app_webview.py 는 Linux 에서 WebKitGTK 백엔드가 있어야 창이
+#        뜬다. PyGObject 는 시스템 gobject-introspection / cairo / 컴파일러에
+#        의존하므로, pip 설치 전에 시스템 패키지를 먼저 점검한다 (sudo 필요 →
+#        명령만 안내하고 자동 설치는 하지 않음). STT_PROFILE 과 무관하게 수행.
+if [ "$OS" = "Linux" ]; then
+    echo ""
+
+    _have_webkit_typelib() {
+        local d
+        for d in /usr/lib /usr/lib64 /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu; do
+            ls "$d"/girepository-1.0/WebKit2-4.*.typelib >/dev/null 2>&1 && return 0
+        done
+        return 1
+    }
+
+    GUI_SYSDEPS_OK=1
+    command -v pkg-config >/dev/null 2>&1 || GUI_SYSDEPS_OK=0
+    { command -v cc >/dev/null 2>&1 || command -v gcc >/dev/null 2>&1; } || GUI_SYSDEPS_OK=0
+    pkg-config --exists girepository-1.0 2>/dev/null || GUI_SYSDEPS_OK=0
+    pkg-config --exists cairo 2>/dev/null || GUI_SYSDEPS_OK=0
+    _have_webkit_typelib || GUI_SYSDEPS_OK=0
+
+    if [ "$GUI_SYSDEPS_OK" = "1" ]; then
+        echo "[3/4+] Linux GUI 백엔드 (WebKitGTK) 설치 중..."
+        $PIP install -r requirements-linux.txt
+    else
+        echo "[3/4+] ⚠️  Linux GUI 백엔드(WebKitGTK) 시스템 패키지가 없습니다."
+        echo "       권장 진입점 app_webview.py 는 이 백엔드가 있어야 창이 뜹니다."
+        echo "       배포판에 맞는 명령으로 설치 후 setup.sh 를 재실행하세요 (sudo 필요):"
+        echo ""
+        echo "         # Debian/Ubuntu (구형 배포판은 gir1.2-webkit2-4.0)"
+        echo "         sudo apt update && sudo apt install -y \\"
+        echo "           gir1.2-webkit2-4.1 libgirepository1.0-dev libcairo2-dev \\"
+        echo "           pkg-config python3-dev gcc"
+        echo ""
+        echo "         # Fedora/RHEL"
+        echo "         sudo dnf install -y webkit2gtk4.1 gobject-introspection-devel \\"
+        echo "           cairo-gobject-devel pkgconf-pkg-config python3-devel gcc"
+        echo ""
+        echo "       (GUI 없이 CLI / Streamlit 만 쓰면 이 단계는 건너뛰어도 됩니다.)"
+    fi
+fi
+
 # 4. 검증
 echo ""
 echo "[4/4] 환경 검증..."
@@ -108,13 +152,23 @@ elif [ "$STT_PROFILE" = "mac" ]; then
     $PYTHON -c "import pyannote.audio; print('pyannote.audio OK')" 2>/dev/null || echo "pyannote.audio: 설치 필요"
 fi
 
+if [ "$OS" = "Linux" ]; then
+    if $PYTHON -c "import gi; gi.require_version('WebKit2','4.1')" 2>/dev/null \
+       || $PYTHON -c "import gi; gi.require_version('WebKit2','4.0')" 2>/dev/null; then
+        echo "WebKitGTK 백엔드 OK"
+    else
+        echo "WebKitGTK 백엔드: 미설치 — app_webview.py 창이 안 뜰 수 있습니다 (위 안내 참고. CLI / Streamlit 는 무관)."
+    fi
+fi
+
 echo ""
 echo "================================================"
 echo "    설정 완료!"
 echo ""
 echo "    실행 (권장 — venv activate 불필요):"
-echo "      bash run_desktop.sh    # 데스크톱 앱 (CustomTkinter)"
-echo "      bash run_web.sh        # 웹 앱 (Streamlit)"
+echo "      .venv/bin/python app_webview.py   # 권장 UI (React/PyWebView)"
+echo "      bash run_desktop.sh               # 데스크톱 앱 (CustomTkinter, v0.8 호환)"
+echo "      bash run_web.sh                   # 웹 앱 (Streamlit, v0.8 호환)"
 echo ""
 echo "    직접 실행:"
 echo "      .venv/bin/python gui.py"

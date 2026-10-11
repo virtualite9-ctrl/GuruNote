@@ -26,16 +26,63 @@ from pathlib import Path
 os.environ.setdefault("GURUNOTE_NO_REDIRECT", "1")
 
 
+def _install_hint() -> str:
+    """OS 별 PyWebView 백엔드 설치 안내 문구.
+
+    pywebview 는 플랫폼 네이티브 웹뷰(WKWebView / WebView2 / WebKitGTK)에 의존한다.
+    특히 Linux 는 pip 패키지만으로 부족하고 시스템 WebKitGTK typelib 이 있어야 한다.
+    """
+    if sys.platform == "darwin":
+        return (
+            "Install with:  pip install 'pywebview>=4.4,<5.0'\n"
+            "(Or run setup.sh to install all GuruNote deps.)\n"
+        )
+    if sys.platform == "win32":
+        return (
+            "Install with:  pip install 'pywebview>=4.4,<5.0'\n"
+            "Windows 는 Edge WebView2 런타임이 필요할 수 있습니다:\n"
+            "  https://developer.microsoft.com/microsoft-edge/webview2/\n"
+            "(Or run setup.bat to install all GuruNote deps.)\n"
+        )
+    # Linux (및 기타 Unix) — WebKitGTK 백엔드
+    return (
+        "Linux 는 PyWebView 의 GTK/WebKit2 백엔드가 필요합니다.\n"
+        "  1) 시스템 패키지 (sudo):\n"
+        "       Debian/Ubuntu (구형은 gir1.2-webkit2-4.0):\n"
+        "         sudo apt install -y gir1.2-webkit2-4.1 libgirepository1.0-dev \\\n"
+        "                             libcairo2-dev pkg-config python3-dev gcc\n"
+        "       Fedora/RHEL:\n"
+        "         sudo dnf install -y webkit2gtk4.1 gobject-introspection-devel \\\n"
+        "                             cairo-gobject-devel pkgconf-pkg-config python3-devel gcc\n"
+        "  2) pip install 'pywebview[gtk]>=4.4,<5.0'\n"
+        "(Or run setup.sh to install all GuruNote deps — 위 과정을 점검/안내합니다.)\n"
+    )
+
+
 def main() -> int:
     try:
         import webview
     except ImportError:
-        sys.stderr.write(
-            "pywebview is not installed.\n"
-            "Install with:  pip install 'pywebview>=4.4,<5.0'\n"
-            "(Or run setup.sh / setup.bat to install all GuruNote deps.)\n"
-        )
+        sys.stderr.write("pywebview is not installed.\n" + _install_hint())
         return 1
+
+    # Linux: pywebview 자체는 import 되어도 GTK/WebKit2 백엔드가 없으면 창 생성
+    # 시점에 불분명한 예외로 죽는다. 백엔드 존재 여부를 먼저 확인해 명확한 설치
+    # 안내로 실패시킨다. (macOS/Windows 는 네이티브 웹뷰가 OS 에 내장되어 생략.)
+    if sys.platform.startswith("linux"):
+        try:
+            import gi  # noqa: PLC0415
+
+            try:
+                gi.require_version("WebKit2", "4.1")
+            except ValueError:
+                gi.require_version("WebKit2", "4.0")
+        except Exception:  # noqa: BLE001 — gi 미설치(ImportError)·버전 부재(ValueError) 모두
+            sys.stderr.write(
+                "PyWebView 의 GTK/WebKit2 백엔드를 불러오지 못했습니다.\n"
+                + _install_hint()
+            )
+            return 1
 
     # Load .env before any bridge method reads os.environ. start_pipeline's
     # preflight checks (OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY /

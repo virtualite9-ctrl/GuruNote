@@ -1,0 +1,25 @@
+# =============================================================================
+# GuruNote Linux GUI 백엔드 의존성 (PyWebView GTK/WebKit2)
+# -----------------------------------------------------------------------------
+# app_webview.py (권장 진입점) 는 PyWebView 로 네이티브 창을 띄운다. Linux 에서는
+# WebKitGTK 백엔드가 필요하며, 이는 pip 패키지(PyGObject)뿐 아니라 시스템
+# gobject-introspection typelib / cairo / 컴파일러를 함께 요구한다.
+#
+# 시스템 선행 패키지 (setup.sh 가 점검/안내, sudo 필요):
+#   Debian/Ubuntu (구형 배포판은 gir1.2-webkit2-4.0):
+#     sudo apt install -y gir1.2-webkit2-4.1 libgirepository1.0-dev \
+#                         libcairo2-dev pkg-config python3-dev gcc
+#   Fedora/RHEL:
+#     sudo dnf install -y webkit2gtk4.1 gobject-introspection-devel \
+#                         cairo-gobject-devel pkgconf-pkg-config python3-devel gcc
+#
+# 위 시스템 라이브러리가 있어야 아래 PyGObject(pywebview[gtk]) 가 pip 빌드/실행에
+# 성공한다. 시스템 패키지가 없으면 pip 설치가 컴파일 에러로 실패한다.
+#
+# NVIDIA GPU Linux 사용자도 이 파일이 필요하다 (STT 엔진과 무관하게 GUI 백엔드).
+# GUI 없이 CLI(gurunote) / Streamlit(app.py) 만 쓰면 설치하지 않아도 된다.
+# =============================================================================
+
+# pywebview GTK extra 는 PyGObject(+pycairo)를 함께 설치한다.
+# base 핀(requirements.txt 의 pywebview>=4.4,<5.0)과 동일 범위를 유지.
+pywebview[gtk]>=4.4,<5.0

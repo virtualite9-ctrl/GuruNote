@@ -618,7 +618,7 @@ GuruNote/
 주요 변경 사항은 [CHANGELOG.md](./CHANGELOG.md) 에 [Keep a Changelog](https://keepachangelog.com/)
 형식으로 기록되며 버전은 [Semantic Versioning](https://semver.org/) 을 따릅니다.
 
-현재 버전: **v1.1.0.0** — 여러 링크 대기열, 청크 단위 실시간 미리보기, 예상 종료 시각, 토큰 없는 로컬 화자분리를 추가했습니다.
+현재 버전: **v1.2.0.0** — Linux 에서 권장 React/PyWebView UI(`app_webview.py`)가 실제로 뜨도록 WebKitGTK 백엔드 지원을 추가했습니다.
 
 ### 여러 링크·실시간 결과·토큰 없는 화자분리
 
