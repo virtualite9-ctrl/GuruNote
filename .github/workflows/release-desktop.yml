@@ -3,7 +3,7 @@ name: Release Desktop Packages
 # 데스크톱 배포 패키지 빌드.
 #
 # 설계상 트레이드오프:
-#   - 번들 패키지(.exe / .app / .dmg / .pkg)에는 UI + 클라우드 STT(AssemblyAI) 만 포함.
+#   - 번들 패키지(.exe / .app / .dmg / .pkg / .tar.gz)에는 UI + 클라우드 STT(AssemblyAI) 만 포함.
 #   - 로컬 GPU STT 엔진(WhisperX / mlx-whisper / pyannote)은 ~2-3GB 의 native binary 와
 #     CUDA/Metal toolchain 의존성이 있어 PyInstaller --onefile 에 묶으면 비현실적이고,
 #     CUDA torch 는 GPU 러너가 필요해 GitHub Actions 에서 빌드도 어렵다.
@@ -111,10 +111,48 @@ jobs:
             staging/GuruNote-macOS.pkg
           if-no-files-found: error
 
+  build-linux:
+    name: Build Linux packages (NVIDIA / Cloud)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packaging dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          # 공통 의존성만 설치 — 로컬 STT 엔진(WhisperX/pyannote)은 사용자가 setup.sh 로 추가 설치
+          pip install -r requirements.txt
+
+      - name: Build GuruNote (onefile) + tar.gz
+        run: |
+          # appimagetool 은 표준 러너에 없어 AppImage 는 자동으로 건너뛴다(tarball 산출).
+          python scripts/package_desktop.py --target linux --formats tar
+
+      - name: Stage Linux artifacts with platform suffix
+        run: |
+          mkdir -p staging
+          cp dist/GuruNote-linux.tar.gz staging/GuruNote-Linux.tar.gz
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gurunote-linux
+          path: |
+            staging/GuruNote-Linux.tar.gz
+          if-no-files-found: error
+
   release:
     name: Publish GitHub Release assets
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [build-windows, build-macos]
+    needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
 
     steps:
@@ -134,6 +172,7 @@ jobs:
             release-assets/gurunote-windows/GuruNote-Windows-Installer.exe
             release-assets/gurunote-macos/GuruNote-macOS.dmg
             release-assets/gurunote-macos/GuruNote-macOS.pkg
+            release-assets/gurunote-linux/GuruNote-Linux.tar.gz
           body: |
             ## 데스크톱 패키지 안내
 
@@ -146,3 +185,4 @@ jobs:
             |---|---|
             | Windows (NVIDIA / Cloud) | `GuruNote-Windows.exe` (단일 실행) · `GuruNote-Windows-Installer.exe` (설치형) |
             | macOS (Apple Silicon / Cloud) | `GuruNote-macOS.dmg` · `GuruNote-macOS.pkg` |
+            | Linux (NVIDIA / Cloud) | `GuruNote-Linux.tar.gz` (단일 실행 파일) |

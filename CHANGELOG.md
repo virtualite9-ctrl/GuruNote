@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+## [1.4.0.0] - 2026-10-11
+
+### Added
+
+- Linux 데스크톱 배포 패키징 — `package_desktop.py --target linux` 로 PyInstaller 단일 실행 파일,
+  `.tar.gz`(`--formats tar`), AppImage(`--formats appimage`, `appimagetool` 있을 때)를 생성.
+  AppImage 아이콘은 런타임 "G" 모노그램(`app_icon._render_icon()`)을 재사용.
+- `release-desktop.yml` 에 `build-linux` 잡(ubuntu-latest) 추가 — 공통 의존성만 설치해 `GuruNote-Linux.tar.gz`
+  를 빌드하고 GitHub Release 에 업로드. (번들 정책 동일: UI + 클라우드 STT 만, 로컬 GPU STT 는 소스 설치.)
+
+### Changed
+
+- README 패키징 명령·CI 설명·프로젝트 구조·비교표에 Linux 반영.
+
 ## [1.2.0.0] - 2026-10-11
 
 ### Added
@@ -2109,7 +2123,8 @@ bash run_desktop.sh
   `os.environ` 에 쓰던 로직을 제거하고 `LLMConfig.from_env(provider=...)`
   override 로 request-local 하게 주입.
 
-[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.2.0.0...HEAD
+[Unreleased]: https://github.com/avlp12/GuruNote/compare/v1.4.0.0...HEAD
+[1.4.0.0]: https://github.com/avlp12/GuruNote/compare/v1.3.0.0...v1.4.0.0
 [1.2.0.0]: https://github.com/avlp12/GuruNote/compare/v1.1.0.0...v1.2.0.0
 [1.1.0.0]: https://github.com/avlp12/GuruNote/compare/v1.0.0.38...v1.1.0.0
 [1.0.0.38]: https://github.com/avlp12/GuruNote/compare/v1.0.0.37...v1.0.0.38
