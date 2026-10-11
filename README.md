@@ -3,8 +3,9 @@
 > 유튜브 링크 한 줄로 해외 IT/AI 팟캐스트를 **화자 분리된 한국어 마크다운 요약본**으로.
 
 ```bash
-$ ./run_webview.command            # macOS — React/PyWebView UI (v1.0+ 권장 진입점)
-$ python3 app_webview.py           # 모든 OS — 동일 진입점, 터미널 출력 보임
+$ bash run_webview.sh              # macOS / Linux — React/PyWebView UI (v1.0+ 권장 진입점)
+$ run_webview.bat                  # Windows — 동일 진입점
+$ ./run_webview.command            # macOS — Finder 더블 클릭 런처
 
 # (v0.8 호환 — 옛 UI 진입점, 유지)
 $ ./run_gui.command                # CustomTkinter 데스크톱 (백그라운드, 로그는 ~/.gurunote/gui.log)
@@ -80,8 +81,9 @@ cp .env.example .env
 # (Windows PowerShell 은 cp 대신 Copy-Item .env.example .env)
 
 # 4. 실행 — v1.0+ React/PyWebView UI (권장)
-bash run_webview.command     # macOS (더블 클릭도 가능)
-python3 app_webview.py       # 모든 OS
+bash run_webview.sh          # macOS / Linux
+run_webview.bat              # Windows
+# (macOS 는 run_webview.command 더블 클릭도 가능)
 
 # (v0.8 호환 — 옛 진입점, 유지)
 bash run_desktop.sh          # CustomTkinter (macOS/Linux), Windows 는 run_desktop.bat
@@ -345,19 +347,27 @@ HUGGINGFACE_TOKEN=hf_...
 
 ### React/PyWebView UI (v1.0+ 권장 진입점)
 
-**macOS**
-```bash
-./run_webview.command
-```
-- Finder 에서 더블 클릭 또는 터미널에서 실행.
-- stdout/stderr 가 콘솔에 그대로 남아 pywebview + 파이프라인 디버깅이 쉽습니다 (CustomTkinter `run_gui.command` 와 달리 `~/.gurunote/gui.log` 로 리다이렉트하지 않음).
-- venv 자동 감지 (`./.venv` → `./venv` → 시스템 `python3`).
+각 OS 전용 런처가 `setup.sh`/`setup.bat` 로 만든 `.venv` 를 activate 없이 직접
+호출합니다. stdout/stderr 는 콘솔에 그대로 남아 pywebview + 파이프라인 디버깅이
+쉽습니다 (CustomTkinter `run_gui.command` 와 달리 `~/.gurunote/gui.log` 로
+리다이렉트하지 않음).
 
-**모든 OS 공통**
+**macOS / Linux**
 ```bash
-# macOS / Linux / Windows
-python3 app_webview.py
+bash run_webview.sh
 ```
+- venv 자동 감지 (`./.venv` → `./venv` → 시스템 `python3`).
+- macOS 는 `./run_webview.command` 로 Finder 더블 클릭 실행도 가능.
+- Linux 는 WebKitGTK 백엔드가 필요합니다 (아래 [선행 조건](#-선행-조건-필수-사전-설치)의 Linux GUI 런타임 참고). `setup.sh` 가 자동 점검/안내합니다.
+
+**Windows**
+```bat
+run_webview.bat
+```
+- `.venv\Scripts\python.exe` 를 직접 호출하므로 `python3` 명령이 없어도 됩니다.
+
+> 직접 실행하려면 venv 의 파이썬으로: macOS/Linux `.venv/bin/python app_webview.py`,
+> Windows `.venv\Scripts\python.exe app_webview.py`.
 
 - pywebview 가 네이티브 윈도우를 띄우고 `gurunote/webui/index.html` 의 React 앱을 로드합니다.
 - 화면 구성: Main (생성 + 결과 4탭) / History (4-facet 트리 + 그리드) / Editor (마크다운 분할 프리뷰) / Dashboard (통계 + 의미 검색) / Settings (API 키 + STT/LLM 엔진 + Provider 조건부 필드).
@@ -539,7 +549,9 @@ GuruNote/
 ├── README.md
 ├── CHANGELOG.md
 ├── app_webview.py              # v1.0+ React/PyWebView 진입점 (권장)
-├── run_webview.command         # macOS React UI 런처
+├── run_webview.sh              # macOS / Linux React UI 런처 (.venv 자동 감지)
+├── run_webview.bat             # Windows React UI 런처
+├── run_webview.command         # macOS Finder 더블 클릭 런처
 ├── docs/                       # 설계 참조, 연구 노트, 작업 일지 (legacy/journal/research/wip)
 ├── gurunote/
 │   ├── __init__.py

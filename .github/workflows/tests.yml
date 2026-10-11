@@ -6,8 +6,9 @@ name: Tests
 # CUDA/Metal toolchain 을 필요로 하지 않는다. tests/ 가 건드리는 모듈
 # (gurunote/types.py, gurunote/llm.py, gurunote/stt_mlx.py) 은 표준 라이브러리와
 # pyyaml, openai 만 import 하고 플랫폼 전용 패키지(mlx 등)는 함수 안에서 지연
-# import 하기 때문이다. 따라서 ubuntu 러너에서 pyproject 의 dev 의존성만으로
-# 전부 실행된다. 약 180건이 2초 정도에 끝난다.
+# import 하기 때문이다. 따라서 러너에서 pyproject 의 dev 의존성만으로 전부
+# 실행된다 (약 180건, 수 초). 무거운 엔진이 없으므로 Linux/Windows/macOS 3-OS
+# 매트릭스로 돌려 경로 구분자·파일 인코딩·줄바꿈 등 플랫폼 회귀를 포착한다.
 #
 # slow marker(실제 LLM 호출, pytest.ini 에 정의)는 외부 엔드포인트에 의존하므로
 # CI 에서 제외한다. 본인 manual 실행 대상으로 남긴다.
@@ -29,13 +30,14 @@ concurrency:
 
 jobs:
   unit:
-    name: Unit tests (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: Unit tests (${{ matrix.os }} · Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        # pyproject.toml 의 requires-python = ">=3.10" 하한과 현행 버전을 함께 검사.
+        # Linux/Windows/macOS 3-OS × requires-python(">=3.10") 하한~현행 버전.
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.10", "3.11", "3.12"]
 
     steps:
