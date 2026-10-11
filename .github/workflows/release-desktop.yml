@@ -17,9 +17,6 @@ on:
   push:
     tags:
       - "v*"
-    # TEMP(verify build-linux): 이 브랜치 push 로 Linux 빌드를 미리 검증. 머지 전 제거.
-    branches:
-      - feat/p2-linux-packaging
   workflow_dispatch:
 
 permissions:
@@ -29,8 +26,6 @@ jobs:
   build-windows:
     name: Build Windows packages (NVIDIA / Cloud)
     runs-on: windows-latest
-    # TEMP(verify build-linux): 브랜치 검증 push 에서는 Linux 잡만 돌린다. 머지 전 제거.
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout
@@ -77,8 +72,6 @@ jobs:
   build-macos:
     name: Build macOS packages (Apple Silicon / Cloud)
     runs-on: macos-latest
-    # TEMP(verify build-linux): 브랜치 검증 push 에서는 Linux 잡만 돌린다. 머지 전 제거.
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout
