@@ -17,6 +17,8 @@ customtkinter>=5.2
 # Windows WebView2 / Linux WebKitGTK 네이티브 사용). 4.x 라인 안정화됨.
 # 기존 customtkinter 와 공존: app.py = CTk, app_webview.py = WebView UI.
 # 결정 근거: docs/webview-ui/TECH_CHOICE.md
+# Linux 는 이 pip 패키지만으로 부족하다 — WebKitGTK(PyGObject) 백엔드를
+# requirements-linux.txt 로 추가 설치해야 창이 뜬다 (setup.sh 가 자동 점검/안내).
 pywebview>=4.4,<5.0
 # Pillow: 썸네일 캐시 로딩 + 앱 아이콘 런타임 생성 (customtkinter 가 전이적으로
 # 당기지만, 직접 사용하므로 명시적으로 선언).
