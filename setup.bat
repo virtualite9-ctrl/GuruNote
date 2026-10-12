@@ -73,6 +73,11 @@ if "%STT_PROFILE%"=="gpu" (
     echo.
     echo [3/4+] WhisperX ^(CUDA^) 설치 중...
     %PIP% install -r requirements-gpu.txt
+    echo.
+    echo [3/4+] 토큰 없는 로컬 화자분리^(Resemblyzer^) 설치 중...
+    :: requirements-diarization.txt 가 빌드 불필요 의존성^(webrtcvad-wheels/librosa/torch^)을
+    :: 이미 설치. Resemblyzer 는 소스 webrtcvad 를 요구해 빌드 실패하므로 --no-deps 로 설치.
+    %PIP% install --no-deps "Resemblyzer==0.1.4"
 )
 
 :: 4. 검증
@@ -81,6 +86,7 @@ echo [4/4] 환경 검증...
 %PYTHON% -c "import torch; cuda=torch.cuda.is_available(); v=torch.__version__; print(f'PyTorch {v}, CUDA: {cuda}')"
 if "%STT_PROFILE%"=="gpu" (
     %PYTHON% -c "import whisperx; print('WhisperX OK')" 2>nul || echo WhisperX: 설치 필요
+    %PYTHON% -c "import resemblyzer, webrtcvad; print('Resemblyzer (토큰 없는 로컬 화자분리) OK')" 2>nul || echo Resemblyzer: 설치 필요 ^(토큰 없는 로컬 화자분리^)
 )
 %PYTHON% -c "import customtkinter; print(f'CustomTkinter {customtkinter.__version__}')"
 

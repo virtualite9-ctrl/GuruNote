@@ -97,6 +97,17 @@ elif [ "$STT_PROFILE" = "mac" ]; then
     $PIP install -r requirements-mac.txt
 fi
 
+# 3-bis-2. 토큰 없는 로컬 화자분리(Resemblyzer) 마무리 설치.
+#   requirements-gpu/mac 이 `-r requirements-diarization.txt` 로 빌드 불필요
+#   의존성(webrtcvad-wheels/librosa/torch)을 이미 설치한다. Resemblyzer 자체는
+#   메타데이터가 소스 webrtcvad 를 요구해 빌드 실패를 유발하므로 --no-deps 로
+#   설치한다(위 의존성으로 런타임 충족). "완전 로컬"(토큰 없는 화자분리) 경로.
+if [ "$STT_PROFILE" = "gpu" ] || [ "$STT_PROFILE" = "mac" ]; then
+    echo ""
+    echo "[3/4+] 토큰 없는 로컬 화자분리(Resemblyzer) 설치 중..."
+    $PIP install --no-deps "Resemblyzer==0.1.4"
+fi
+
 # 3-ter. Linux GUI 백엔드 (PyWebView GTK/WebKit2)
 #        권장 진입점 app_webview.py 는 Linux 에서 WebKitGTK 백엔드가 있어야 창이
 #        뜬다. PyGObject 는 시스템 gobject-introspection / cairo / 컴파일러에
@@ -150,6 +161,10 @@ if [ "$STT_PROFILE" = "gpu" ]; then
 elif [ "$STT_PROFILE" = "mac" ]; then
     $PYTHON -c "import mlx_whisper; print('mlx-whisper OK')" 2>/dev/null || echo "mlx-whisper: 설치 필요"
     $PYTHON -c "import pyannote.audio; print('pyannote.audio OK')" 2>/dev/null || echo "pyannote.audio: 설치 필요"
+fi
+if [ "$STT_PROFILE" = "gpu" ] || [ "$STT_PROFILE" = "mac" ]; then
+    $PYTHON -c "import resemblyzer, webrtcvad; print('Resemblyzer (토큰 없는 로컬 화자분리) OK')" 2>/dev/null \
+        || echo "Resemblyzer: 설치 필요 (토큰 없는 로컬 화자분리 — 완전 로컬 경로에 필요)"
 fi
 
 if [ "$OS" = "Linux" ]; then

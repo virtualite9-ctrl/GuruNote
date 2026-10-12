@@ -298,6 +298,31 @@ GURUNOTE_STT_ENGINE=auto
 
 > `.env` 는 `.gitignore` 에 의해 절대 커밋되지 않습니다.
 
+### 🔒 완전 로컬 실행 (옵션 — 클라우드·토큰 없이)
+
+STT·화자분리·LLM 을 **전부 로컬**에서 돌릴 수 있습니다. 클라우드 API 키도,
+HuggingFace 토큰도 필요 없습니다. 로컬 STT 는 GPU 가 필요합니다
+(NVIDIA → WhisperX, Apple Silicon → MLX). `bash setup.sh` / `setup.bat` 가
+**토큰 없는 로컬 화자분리(Resemblyzer)** 까지 자동 설치합니다 — 소스 빌드가
+필요한 `webrtcvad` 대신 prebuilt 휠(`webrtcvad-wheels`)을 써서 빌드툴 없이
+설치되고, `Resemblyzer` 는 `--no-deps` 로 넣습니다.
+
+`.env` 를 아래처럼 두면 됩니다:
+
+```env
+GURUNOTE_STT_ENGINE=whisperx            # Apple Silicon 은 mlx. 클라우드 STT 안 씀
+GURUNOTE_DIARIZATION_BACKEND=resemblyzer # 토큰 없는 로컬 화자분리 (HF 토큰 불필요)
+LLM_PROVIDER=openai_compatible          # 로컬 LLM
+OPENAI_BASE_URL=http://127.0.0.1:1234/v1 # 로컬 LLM 서버 (예: LM Studio / Ollama / vLLM / oMLX)
+LLM_REASONING_EFFORT=none               # 추론형 로컬 모델이면 권장 (아래 참고)
+```
+
+- `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` / `ASSEMBLYAI_API_KEY` /
+  `HUGGINGFACE_TOKEN` 이 **모두 비어 있어도** 동작합니다.
+- 더 높은 화자분리 품질을 원하면 대신 `GURUNOTE_DIARIZATION_BACKEND=pyannote` +
+  HF 토큰/모델 동의를 쓰면 됩니다(로컬 추론이지만 토큰이 필요).
+- 화자분리를 아예 끄려면 `GURUNOTE_DIARIZATION_BACKEND=none`.
+
 ### 파이프라인 동작 제어 (선택 환경변수)
 
 `LLM_CHUNK_TIMEOUT_SEC` (기본 60) / `LLM_HTTP_TIMEOUT_SEC` (기본 90) — LLM 호출 한 건에
