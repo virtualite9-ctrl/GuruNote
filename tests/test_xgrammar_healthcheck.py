@@ -190,3 +190,32 @@ class TestThinkingBudget:
             forwarded = mock_wrap.call_args.kwargs
         extra = forwarded.get("extra_body", {})
         assert extra.get("thinking_budget") == 0
+
+
+# =============================================================================
+# TestReasoningEffort — LLM_REASONING_EFFORT 설정 시에만 reasoning_effort 송신
+# =============================================================================
+class TestReasoningEffort:
+    def test_not_sent_when_unset(self, monkeypatch):
+        from gurunote.llm.client import _thinking_extra_body
+        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
+        assert _thinking_extra_body() == {"thinking_budget": 0}
+
+    def test_blank_is_treated_as_unset(self, monkeypatch):
+        from gurunote.llm.client import _thinking_extra_body
+        monkeypatch.setenv("LLM_REASONING_EFFORT", "  ")
+        assert "reasoning_effort" not in _thinking_extra_body()
+
+    def test_sent_alongside_thinking_budget_when_set(self, monkeypatch):
+        from gurunote.llm.client import _thinking_extra_body
+        monkeypatch.setenv("LLM_REASONING_EFFORT", "none")
+        assert _thinking_extra_body() == {"thinking_budget": 0, "reasoning_effort": "none"}
+
+    def test_healthcheck_budget_leaves_room_for_reasoning(self, mock_cfg):
+        """32 토큰이면 추론형 모델이 답 전에 끊겨 정상 서버를 미작동으로 오판한다."""
+        from gurunote.llm import _check_xgrammar_available
+        with patch("gurunote.llm.client._get_omlx_signature", return_value=None), \
+             patch("gurunote.llm.client._call_llm_with_continuation") as mock_call:
+            mock_call.return_value = ('{"ok": "yes"}', "stop")
+            assert _check_xgrammar_available(mock_cfg) is True
+        assert mock_call.call_args.kwargs["max_tokens"] >= 256
