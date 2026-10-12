@@ -20,6 +20,36 @@ DEFAULT_SIMILARITY_THRESHOLD = 0.75
 # apparent evidence. This conservative floor can leave short turns unassigned.
 MIN_INTERVAL_SECONDS = 1.6
 
+# 토큰 없는 Resemblyzer 군집은 과분할되기 쉬워, 두 조정 노브를 환경변수로 노출한다.
+# (production 진입점 diarize_local_segments 에서만 읽어 전달 — diarize_segments 를
+#  직접 호출하는 테스트/코드의 기본 동작은 그대로 유지한다.)
+ENV_SIMILARITY = "GURUNOTE_DIARIZATION_SIMILARITY"      # float (0,1]; 낮출수록 병합↑(화자↓)
+ENV_MAX_SPEAKERS = "GURUNOTE_DIARIZATION_MAX_SPEAKERS"  # int>=1; 군집 상한(초과 시 병합)
+
+
+def _env_similarity() -> float:
+    """`GURUNOTE_DIARIZATION_SIMILARITY` → (0,1] 범위 float. 미설정/무효 시 기본값."""
+    raw = os.environ.get(ENV_SIMILARITY, "").strip()
+    if not raw:
+        return DEFAULT_SIMILARITY_THRESHOLD
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_SIMILARITY_THRESHOLD
+    return value if 0 < value <= 1 else DEFAULT_SIMILARITY_THRESHOLD
+
+
+def _env_max_speakers() -> int | None:
+    """`GURUNOTE_DIARIZATION_MAX_SPEAKERS` → int>=1. 미설정/무효 시 None(상한 없음)."""
+    raw = os.environ.get(ENV_MAX_SPEAKERS, "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        return None
+    return value if value >= 1 else None
+
 
 class LocalDiarizationError(RuntimeError):
     """Local diarization failed; callers must not fall back to cloud STT."""
@@ -69,7 +99,43 @@ def diarize_local_segments(audio_path, segments, *, backend, stop_event=None):
                  "overlap_supported": False, "speaker_count": int(bool(segments))})
     if backend != "resemblyzer":
         raise ValueError(f"Not a local segment diarization backend: {backend!r}")
-    return diarize_segments(audio_path, segments, stop_event=stop_event)
+    return diarize_segments(
+        audio_path, segments, stop_event=stop_event,
+        similarity_threshold=_env_similarity(),
+        max_speakers=_env_max_speakers(),
+    )
+
+
+def _merge_clusters_to_max(centroids, sums, seg_cluster, max_speakers):
+    """centroid 쌍 중 가장 유사한 것부터 병합(agglomerative)해 군집 수를 max_speakers
+    이하로 줄인다. seg_cluster(세그먼트→centroid 인덱스)를 병합 결과로 재매핑해 반환.
+
+    과분할(같은 화자가 여러 군집으로 쪼개짐)을 사후 보정하기 위한 것으로, 토큰 없는
+    근사 분리의 한계를 완화할 뿐 정확도를 보장하지는 않는다.
+    """
+    root = list(range(len(centroids)))
+    cur_sum = {i: list(sums[i]) for i in range(len(centroids))}
+    cur_cen = {i: list(centroids[i]) for i in range(len(centroids))}
+    active = set(range(len(centroids)))
+    while len(active) > max_speakers:
+        act = sorted(active)
+        best_pair = None
+        best_sim = -2.0
+        for a in range(len(act)):
+            for b in range(a + 1, len(act)):
+                i, j = act[a], act[b]
+                sim = sum(x * y for x, y in zip(cur_cen[i], cur_cen[j]))
+                if sim > best_sim:
+                    best_sim = sim
+                    best_pair = (i, j)
+        i, j = best_pair
+        cur_sum[i] = [x + y for x, y in zip(cur_sum[i], cur_sum[j])]
+        cur_cen[i] = _unit_vector(cur_sum[i])
+        active.discard(j)
+        for k in range(len(root)):
+            if root[k] == j:
+                root[k] = i
+    return {index: root[cid] for index, cid in seg_cluster.items()}
 
 
 def labels_by_first_appearance(segments: Sequence[Segment]) -> list[Segment]:
@@ -152,6 +218,7 @@ def diarize_segments(
     *,
     embed_interval: Callable[[float, float], Sequence[float] | None] | None = None,
     similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+    max_speakers: int | None = None,
 ) -> tuple[list[Segment], dict]:
     """Greedy cosine-centroid clustering of ASR intervals, in timestamp order.
 
@@ -168,7 +235,7 @@ def diarize_segments(
         embed_interval = _load_embedder(audio_path, stop_event)
     centroids: list[list[float]] = []
     sums: list[list[float]] = []
-    labels: dict[int, str] = {}
+    seg_cluster: dict[int, int] = {}
     for index in sorted(range(len(segments)), key=lambda i: (segments[i].start, i)):
         check_cancelled(stop_event)
         segment = segments[index]
@@ -194,20 +261,32 @@ def diarize_segments(
         else:
             sums[best] = [a + b for a, b in zip(sums[best], vector)]
             centroids[best] = _unit_vector(sums[best])
-        labels[index] = _speaker_label(best)
-    if len(labels) < 2:
+        seg_cluster[index] = best
+    if len(seg_cluster) < 2:
         raise LocalDiarizationError(
             "Local diarization requires at least two usable voiced ASR intervals; "
             "audio may be silent or intervals too short"
         )
     check_cancelled(stop_event)
+    # 선택: 화자 수 상한 — 가장 가까운 centroid 쌍부터 병합해 과분할을 사후 보정.
+    clusters_before_merge = len(centroids)
+    if max_speakers is not None and len(set(seg_cluster.values())) > max_speakers:
+        seg_cluster = _merge_clusters_to_max(centroids, sums, seg_cluster, max_speakers)
+    # 라벨: 첫 등장(시간) 순서로 A, B, C ... 를 부여.
+    order: dict[int, str] = {}
+    for index in sorted(seg_cluster, key=lambda i: (segments[i].start, i)):
+        cid = seg_cluster[index]
+        if cid not in order:
+            order[cid] = _speaker_label(len(order))
+    labels = {index: order[cid] for index, cid in seg_cluster.items()}
     unassigned = [index for index in range(len(segments)) if index not in labels]
     return ([replace(segment, speaker=labels.get(index, "UNKNOWN"))
              for index, segment in enumerate(segments)],
             {"backend": "resemblyzer", "approximate": True,
              "scope": "one speaker embedding per ASR segment",
-             "overlap_supported": False, "speaker_count": len(centroids),
+             "overlap_supported": False, "speaker_count": len(order),
              "clustering": "greedy_cosine_centroid", "similarity_threshold": similarity_threshold,
+             "max_speakers": max_speakers, "clusters_before_merge": clusters_before_merge,
              "usable_intervals": len(labels), "unassigned_intervals": unassigned,
              "minimum_voiced_seconds": MIN_INTERVAL_SECONDS,
              "status": "partial" if unassigned else "clustered"})

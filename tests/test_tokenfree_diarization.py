@@ -461,3 +461,62 @@ def test_canonical_hf_token_preserves_authorized_pyannote_mode(monkeypatch):
     result = mlx.transcribe_mlx("unused.wav", lambda _: None, [])
     assert tokens == ["test-canonical-token"]
     assert [s.speaker for s in result.segments] == ["A", "B"]
+
+
+# =============================================================================
+# TestTuningKnobs — 토큰 없는 Resemblyzer 과분할 완화 (env 임계값 / max_speakers)
+# =============================================================================
+class TestTuningKnobs:
+    def test_lower_threshold_merges_similar_speakers(self):
+        from gurunote.diarization import diarize_segments
+        # 두 구간의 코사인 유사도는 0.7.
+        vectors = {0.0: [1.0, 0.0], 2.0: [0.7, 0.714142842854285]}
+        segs = lambda: [Segment("", 0.0, 2.0, "a"), Segment("", 2.0, 4.0, "b")]
+        # 기본 임계값(0.75): 0.7 < 0.75 → 별개 화자 2명.
+        _, hi = diarize_segments("x.wav", segs(), embed_interval=lambda s, e: vectors[s],
+                                 similarity_threshold=0.75)
+        assert hi["speaker_count"] == 2
+        # 임계값 0.65: 0.7 ≥ 0.65 → 한 화자로 병합.
+        out, lo = diarize_segments("x.wav", segs(), embed_interval=lambda s, e: vectors[s],
+                                   similarity_threshold=0.65)
+        assert lo["speaker_count"] == 1
+        assert [s.speaker for s in out] == ["A", "A"]
+
+    def test_max_speakers_caps_oversplit_by_merging(self):
+        from gurunote.diarization import diarize_segments
+        # 4개의 직교 임베딩 → 기본적으로 4개 군집(과분할).
+        vectors = {0.0: [1.0, 0, 0, 0], 2.0: [0, 1.0, 0, 0],
+                   4.0: [0, 0, 1.0, 0], 6.0: [0, 0, 0, 1.0]}
+        segs = [Segment("", 0.0, 2.0, "a"), Segment("", 2.0, 4.0, "b"),
+                Segment("", 4.0, 6.0, "c"), Segment("", 6.0, 8.0, "d")]
+        _, m4 = diarize_segments("x.wav", list(segs),
+                                 embed_interval=lambda s, e: vectors[s])
+        assert m4["speaker_count"] == 4
+        # max_speakers=2 → 가장 가까운 쌍부터 병합해 2명으로.
+        out, m2 = diarize_segments("x.wav", list(segs),
+                                   embed_interval=lambda s, e: vectors[s], max_speakers=2)
+        assert m2["speaker_count"] == 2
+        assert m2["clusters_before_merge"] == 4
+        assert m2["max_speakers"] == 2
+        assert sorted(set(s.speaker for s in out)) == ["A", "B"]
+        assert len(out) == 4  # 세그먼트는 보존
+
+    def test_env_similarity_parsing(self, monkeypatch):
+        from gurunote.diarization import _env_similarity, DEFAULT_SIMILARITY_THRESHOLD
+        monkeypatch.delenv("GURUNOTE_DIARIZATION_SIMILARITY", raising=False)
+        assert _env_similarity() == DEFAULT_SIMILARITY_THRESHOLD
+        monkeypatch.setenv("GURUNOTE_DIARIZATION_SIMILARITY", "0.6")
+        assert _env_similarity() == 0.6
+        for bad in ("", "  ", "abc", "0", "1.5", "-0.2"):
+            monkeypatch.setenv("GURUNOTE_DIARIZATION_SIMILARITY", bad)
+            assert _env_similarity() == DEFAULT_SIMILARITY_THRESHOLD
+
+    def test_env_max_speakers_parsing(self, monkeypatch):
+        from gurunote.diarization import _env_max_speakers
+        monkeypatch.delenv("GURUNOTE_DIARIZATION_MAX_SPEAKERS", raising=False)
+        assert _env_max_speakers() is None
+        monkeypatch.setenv("GURUNOTE_DIARIZATION_MAX_SPEAKERS", "2")
+        assert _env_max_speakers() == 2
+        for bad in ("", " ", "abc", "0", "-1", "1.5"):
+            monkeypatch.setenv("GURUNOTE_DIARIZATION_MAX_SPEAKERS", bad)
+            assert _env_max_speakers() is None
