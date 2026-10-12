@@ -1,9 +1,23 @@
-# Optional ungated local diarization; upstream package includes pretrained.pt.
-# Source / Apache-2.0: https://github.com/resemble-ai/Resemblyzer
-Resemblyzer==0.1.4
-# Retain PyTorch's modern default weights-only checkpoint loading. No safety override.
-torch>=2.6
+# =============================================================================
+# 토큰 없는 로컬 화자분리(Resemblyzer) 의존성 — 빌드툴 없이 설치되는 부분.
+# -----------------------------------------------------------------------------
+# HF 토큰/모델 동의가 필요한 pyannote 대신, 공식 Resemblyzer 패키지(동봉 모델)로
+# ASR 구간별 근사 화자분리를 수행하는 "완전 로컬" 경로의 의존성이다.
+#
+# ⚠️ webrtcvad 주의: 상류 `webrtcvad`(2.0.10)는 C 확장 소스 빌드가 필요해
+#   Windows/Python 3.13 등에서 MSVC/gcc 빌드툴 없이는 설치가 실패한다. 그래서
+#   동일한 `webrtcvad` 모듈을 prebuilt 휠로 제공하는 `webrtcvad-wheels` 를 쓴다.
+#
+# ⚠️ Resemblyzer 는 패키지 메타데이터가 소스 `webrtcvad` 를 요구하므로, 이 파일로
+#   함께 설치하면 pip 가 다시 소스 빌드를 시도해 실패한다. 따라서 Resemblyzer 는
+#   setup.sh / setup.bat 가 아래 의존성을 먼저 깐 뒤 `--no-deps` 로 별도 설치한다:
+#     pip install --no-deps "Resemblyzer==0.1.4"
+#   (수동 설치도 동일 — 이 파일 설치 후 위 한 줄.)
+# =============================================================================
+
+# prebuilt 휠 (소스 빌드 불필요). `import webrtcvad` 모듈을 제공.
+webrtcvad-wheels>=2.0.14
 librosa>=0.10
-# webrtcvad 2.0.10 imports pkg_resources, removed in setuptools 81+.
-# Keep the explicit runtime compatibility bound; do not modify global packages.
-setuptools>=68,<81
+# Resemblyzer 의 VoiceEncoder 는 torch 런타임이 필요. GPU/Apple 프로파일에서 이미
+# 설치되지만 명시(CPU 로컬에서도 충족되도록).
+torch>=2.6
