@@ -7,6 +7,21 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- omlx 가 아닌 OpenAI 호환 서버(LM Studio)에서 추론형 모델을 쓰면 번역이 시작 전에
+  "omlx xgrammar 미작동" 으로 차단됐다. 사전 점검이 `max_tokens=32` 로 요청하는데,
+  모델이 그 32토큰을 추론에 다 써서 본문이 빈 문자열로 돌아왔고(`finish_reason=length`),
+  이를 JSON 강제 미작동으로 오판했다. 서버의 JSON 강제는 정상이었다.
+  - 점검의 토큰 한도를 512 로 늘렸다.
+  - 차단 메시지에 omlx 가 아닌 서버용 안내를 덧붙였다.
+
+### Added
+
+- `LLM_REASONING_EFFORT` 환경변수. 설정하면 모든 OpenAI 호환 호출에 `reasoning_effort` 로
+  실어 보낸다. 기존 `thinking_budget=0` 은 omlx 전용이라 LM Studio 는 무시한다.
+  비워두면 보내지 않으므로 기존 환경의 동작은 바뀌지 않는다.
+
 ## [1.2.0.0] - 2026-10-11
 
 ### Added

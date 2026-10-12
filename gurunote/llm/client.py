@@ -131,6 +131,21 @@ def _float_env(key: str, default: float) -> float:
         return default
 
 
+def _thinking_extra_body() -> dict:
+    """thinking 을 끄기 위해 요청에 실어 보내는 추가 파라미터.
+
+    `thinking_budget=0` 은 omlx 전용이라 LM Studio 같은 다른 OpenAI 호환 서버는 무시한다.
+    그런 서버에서 추론형 모델을 쓰면 max_tokens 를 추론에 다 쓰고 본문이 비어 돌아온다.
+    `LLM_REASONING_EFFORT` 를 설정하면 (예: none) `reasoning_effort` 로 함께 보낸다.
+    비워 두면 보내지 않으므로 기존 동작은 그대로다. 호출 시점에 읽는다 (`.env` 반영).
+    """
+    extra: dict = {"thinking_budget": 0}
+    effort = os.environ.get("LLM_REASONING_EFFORT", "").strip()
+    if effort:
+        extra["reasoning_effort"] = effort
+    return extra
+
+
 def _positive_float_env(key: str, default: float) -> float:
     """0 이하가 의미 없는 값(타임아웃) 전용.
 
@@ -239,7 +254,7 @@ def _call_llm_once(config: LLMConfig, system: str, user: str, max_tokens: int) -
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            extra_body={"thinking_budget": 0},
+            extra_body=_thinking_extra_body(),
             timeout=_http_timeout_sec(),
         )
     resp = _call_with_wall_clock_timeout(_create, _http_timeout_sec())
@@ -260,6 +275,9 @@ _XGRAMMAR_CHECK_CACHE: dict = {
 
 
 _XGRAMMAR_CHECK_TTL_SEC = 21600  # 6시간 fallback
+
+
+_XGRAMMAR_CHECK_MAX_TOKENS = 512
 
 
 def _get_omlx_signature(config: "LLMConfig") -> Optional[str]:
@@ -336,7 +354,9 @@ def _check_xgrammar_available(
         content, _fr = _call_llm_with_continuation(
             config,
             [{"role": "user", "content": 'Return JSON: {"ok": "yes"}'}],
-            max_tokens=32,
+            # 추론형 모델은 thinking 을 못 끄면 답 전에 토큰을 쓴다. 32 로는 추론만 하다
+            # finish_reason=length 로 끊겨 본문이 비고, 멀쩡한 서버를 미작동으로 오판했다.
+            max_tokens=_XGRAMMAR_CHECK_MAX_TOKENS,
             response_format={
                 "type": "json_schema",
                 "json_schema": {
@@ -473,7 +493,7 @@ def _call_llm_once_with_reason(
         "temperature": config.temperature,
         # thinking_budget=0 — omlx 정식 thinking 강제 (5/23 진단). openai SDK extra_body
         # 경유로 알려지지 않은 파라미터 호환성 catch.
-        "extra_body": {"thinking_budget": 0},
+        "extra_body": _thinking_extra_body(),
         # HTTP-level read timeout (5/23 수정) — batch 응답에서 정확 작동 (stream=False catch).
         # ThreadPool wrapper 결합으로 이중 안전장치.
         "timeout": _http_timeout_sec(),

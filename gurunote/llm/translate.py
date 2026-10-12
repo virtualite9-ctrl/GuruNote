@@ -66,7 +66,9 @@ def translate_transcript(
             "omlx xgrammar 미작동 — structured output 강제 부재 → 처리 시 timeout 다발 + "
             "품질 저하 위험. Episilon 서버에서 복구 필요:\n"
             "  brew reinstall omlx --with-grammar\n"
-            "  brew services restart jundot/omlx/omlx"
+            "  brew services restart jundot/omlx/omlx\n"
+            "omlx 가 아닌 서버(LM Studio 등)에서 추론형 모델을 쓰는 경우에는 "
+            ".env 에 LLM_REASONING_EFFORT=none 을 설정해 보세요."
         )
 
     # 5/24 — STT 의미 단위 재분할 적용 시 chunk size 자동 축소.
