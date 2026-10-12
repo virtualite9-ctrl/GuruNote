@@ -321,6 +321,8 @@ warm 상태에서도 계속 timeout 이 난다면 그때 늘리는 것이 맞습
 | `GURUNOTE_SEGMENT_RESPLIT` | `1` (on) | STT 직후 word-level 의미 단위 재분할. Whisper 음성 경계 잘림을 보완해 번역 정합·가독성 향상. `0` 으로 끄면 기존 Whisper segment 그대로 사용. |
 | `GURUNOTE_TWO_PASS` | `1` (on) | 2-pass DCCD 번역. 1단계 자유 번역 → 2단계 정렬로 segment 수 정합 보장. `0` 으로 끄면 기존 1-pass. |
 | `PYANNOTE_DIARIZATION_MODEL` | `pyannote/speaker-diarization-community-1` | 화자 분리 모델 (Apple Silicon). community-1 은 speaker confusion 마킹이 3.1 대비 감소. |
+| `GURUNOTE_DIARIZATION_SIMILARITY` | `0.75` | 토큰 없는 로컬(Resemblyzer) 군집 유사도 임계값 (0,1]. **낮출수록 병합↑ → 화자 수↓.** 과분할이 심하면 `0.6`~`0.65`. |
+| `GURUNOTE_DIARIZATION_MAX_SPEAKERS` | (없음) | 토큰 없는 로컬 화자 수 상한(정수). 초과 시 가장 가까운 화자끼리 병합. 화자 수를 알면 확실(인터뷰=`2`). 비우면 무제한. |
 
 ### Hugging Face 토큰 + pyannote community-1 권한 설정
 
